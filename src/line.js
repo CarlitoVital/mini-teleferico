@@ -52,6 +52,12 @@ export class Line {
     for (const p of this.segPlans) n += p.count;
     return n;
   }
+
+  get tallCount() {
+    let n = 0;
+    for (const p of this.segPlans) n += p.tall;
+    return n;
+  }
 }
 
 /** Geometrie eines Linienendes (T-Stück zum Verlängern). atEnd=false → Anfang. */

@@ -1,6 +1,6 @@
 // Maus- und Touch-Steuerung: Linien zeichnen, verlängern, umleiten, Objekte ziehen.
 import { CONFIG, LINE_COLORS } from './config.js';
-import { pointSegDist } from './util.js';
+import { pointSegDist, clamp } from './util.js';
 import { handleGeometry, offsetSegment } from './line.js';
 import { CABIN } from './gondola.js';
 
@@ -16,10 +16,20 @@ export class Input {
     this.audio = audio;
     this.pointerId = null;
     this.downAt = null;
+    // Kamera-Gesten: aktive Touch-Zeiger, Pinch-Zustand, Ziehen mit rechter/mittlerer Maustaste
+    this.touches = new Map();
+    this.pinch = null;
+    this.pan = null;
     canvas.addEventListener('pointerdown', (e) => this.onDown(e));
     window.addEventListener('pointermove', (e) => this.onMove(e));
     window.addEventListener('pointerup', (e) => this.onUp(e));
-    window.addEventListener('pointercancel', () => this.cancel());
+    window.addEventListener('pointercancel', (e) => {
+      this.touches.delete(e.pointerId);
+      if (this.pinch && this.touches.size < 2) this.pinch = null;
+      if (this.pan && this.pan.id === e.pointerId) this.pan = null;
+      if (e.pointerId === this.pointerId) this.cancel();
+    });
+    canvas.addEventListener('wheel', (e) => this.onWheel(e), { passive: false });
     canvas.addEventListener('pointerleave', () => {
       if (!this.view.drag && !this.view.tipUntil) this.view.hoverStation = null;
     });
@@ -130,8 +140,61 @@ export class Input {
     return lines.includes(this.view.selectedLine) ? this.view.selectedLine : lines[0];
   }
 
+  // ------------------------------------------------------------ Kamera (Pan/Zoom)
+  get cameraEnabled() {
+    const g = this.game;
+    return !!g && !g.demo && !this.ui.modalOpen;
+  }
+
+  onWheel(e) {
+    if (!this.cameraEnabled) return;
+    e.preventDefault();
+    const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1;
+    const dy = clamp(e.deltaY * unit, -240, 240);
+    this.cam.zoomAt(e.clientX, e.clientY, Math.exp(-dy * (e.ctrlKey ? 0.006 : 0.0016)));
+  }
+
+  /** Zwei Finger: Pinch-Zoom und Schwenken. */
+  startPinch() {
+    const [a, b] = [...this.touches.values()];
+    // ein begonnenes Linienziehen o. Ä. verwerfen
+    if (this.view.drag) this.cancel();
+    this.pinch = { d: Math.hypot(a.x - b.x, a.y - b.y) || 1, mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2 };
+  }
+
+  movePinch() {
+    const [a, b] = [...this.touches.values()];
+    const d = Math.hypot(a.x - b.x, a.y - b.y) || 1;
+    const mx = (a.x + b.x) / 2;
+    const my = (a.y + b.y) / 2;
+    this.cam.panBy(mx - this.pinch.mx, my - this.pinch.my);
+    this.cam.zoomAt(mx, my, d / this.pinch.d);
+    this.pinch = { d, mx, my };
+  }
+
   // ------------------------------------------------------------ Pointer
   onDown(e) {
+    if (e.pointerType === 'touch') {
+      this.touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (this.touches.size >= 2) {
+        if (this.cameraEnabled) {
+          e.preventDefault();
+          this.startPinch();
+        }
+        return;
+      }
+    }
+    if ((e.button === 1 || e.button === 2) && this.cameraEnabled) {
+      e.preventDefault();
+      this.pan = { id: e.pointerId, x: e.clientX, y: e.clientY };
+      this.canvas.style.cursor = 'grabbing';
+      try {
+        this.canvas.setPointerCapture(e.pointerId);
+      } catch {
+        // ohne Capture weiter
+      }
+      return;
+    }
     if (!this.enabled || this.view.drag || e.button > 0) return;
     e.preventDefault();
     const w = this.world(e);
@@ -155,9 +218,27 @@ export class Input {
     this.view.selectedLine = null;
     this.view.hoverStation = null;
     this.pointerId = null;
+    // Tipp auf ein Bauwerk: kurz erklären, warum dort kein Seil hinüberführt
+    const B = this.game.map.buildings;
+    const bld = B && B.buildingAt(w.x, w.y);
+    this.view.hoverBuilding = bld;
+    if (bld) this.view.tipUntil = performance.now() + 2600;
   }
 
   onMove(e) {
+    if (e.pointerType === 'touch' && this.touches.has(e.pointerId)) {
+      this.touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (this.pinch && this.touches.size >= 2) {
+        this.movePinch();
+        return;
+      }
+    }
+    if (this.pan && e.pointerId === this.pan.id) {
+      this.cam.panBy(e.clientX - this.pan.x, e.clientY - this.pan.y);
+      this.pan.x = e.clientX;
+      this.pan.y = e.clientY;
+      return;
+    }
     const drag = this.view.drag;
     if (!drag) {
       if (e.pointerType === 'mouse' && this.enabled && e.target === this.canvas) this.updateHover(this.world(e), e);
@@ -176,6 +257,18 @@ export class Input {
   }
 
   onUp(e) {
+    if (e.pointerType === 'touch') {
+      this.touches.delete(e.pointerId);
+      if (this.pinch) {
+        if (this.touches.size < 2) this.pinch = null;
+        return;
+      }
+    }
+    if (this.pan && e.pointerId === this.pan.id) {
+      this.pan = null;
+      this.canvas.style.cursor = '';
+      return;
+    }
     const drag = this.view.drag;
     if (!drag || e.pointerId !== this.pointerId) return;
     this.view.drag = null;
@@ -210,6 +303,8 @@ export class Input {
   updateHover(w, e) {
     const st = this.hitStation(w, this.tol(e, 6));
     this.view.hoverStation = st;
+    const B = this.game.map.buildings;
+    this.view.hoverBuilding = !st && B ? B.buildingAt(w.x, w.y) : null;
     const over =
       st ||
       this.hitHandle(w, this.tol(e, 11)) ||
@@ -299,8 +394,7 @@ export class Input {
           list.push(st);
           this.audio.snap(list.length);
         } else {
-          drag.invalidStation = st;
-          this.warnInvalid(drag, st, v, list);
+          this.markInvalid(drag, st, v, list[list.length - 1]);
         }
       }
     }
@@ -309,23 +403,48 @@ export class Input {
     drag.overLast = st === last;
     drag.hoverStation = st;
     drag.floatInvalid = !!drag.invalidStation;
+    drag.floatReason = drag.invalidStation ? drag.invalidText : null;
     if (!drag.overLast && last && !drag.floatInvalid) {
-      const free = g.mastsFree + (drag.line ? drag.line.mastCount : 0) - g.mastsFor(list);
-      drag.floatInvalid = g.map.mastPlan(last, w).count > free;
+      drag.floatReason = this.checkFloating(drag, last, w, list);
+      drag.floatInvalid = !!drag.floatReason;
     }
   }
 
-  warnInvalid(drag, st, v, list) {
+  /** Ungültige Station unter dem Zeiger merken; Hinweis nur einmal pro Station. */
+  markInvalid(drag, st, v, from) {
+    drag.invalidStation = st;
+    drag.invalidText = this.invalidText(v, from, st);
     if (drag.lastInvalid === st) return;
     drag.lastInvalid = st;
-    if (v.reason === 'masts') {
-      const need = this.game.map.mastPlan(list[list.length - 1], st).count;
-      const free = Math.max(0, v.free - this.game.mastsFor(list));
-      this.ui.toast(
-        `Zu wenig Masten: Diese Strecke braucht ${need} ${need === 1 ? 'Mast' : 'Masten'}, frei ${free === 1 ? 'ist' : 'sind'} ${free}.`,
-      );
-    }
+    this.ui.toast(drag.invalidText);
     this.audio.invalid();
+  }
+
+  /** Kurzer Hinweis, warum eine Strecke nicht gebaut werden kann. */
+  invalidText(v, a, b) {
+    const g = this.game;
+    if (v.reason === 'blocked') return v.plan.reason;
+    if (v.reason === 'tall') {
+      return `Hier braucht das Seil ${v.tall} ${v.tall === 1 ? 'hohen Mast' : 'hohe Masten'} über Gebäude – frei: ${v.tallFree}.`;
+    }
+    if (v.reason === 'masts' && a && b) {
+      const need = g.map.mastPlan(a, b).count;
+      const free = Math.max(0, v.free - (v.masts - need));
+      return `Zu wenig Masten: Diese Strecke braucht ${need} ${need === 1 ? 'Mast' : 'Masten'}, frei ${free === 1 ? 'ist' : 'sind'} ${free}.`;
+    }
+    return 'Diese Strecke lässt sich nicht bauen.';
+  }
+
+  /** Prüft das frei schwebende Stück (letzte Station → Zeiger) und merkt sich den Grund. */
+  checkFloating(drag, from, to, list) {
+    const g = this.game;
+    const plan = g.map.mastPlan(from, to);
+    const free = g.mastsFree + (drag.line ? drag.line.mastCount : 0) - g.mastsFor(list);
+    const tallFree = g.tallMastsFree + (drag.line ? drag.line.tallCount : 0) - g.tallFor(list);
+    if (plan.blocked) return plan.reason;
+    if (plan.tall > tallFree) return `Braucht ${plan.tall} hohen Mast über Gebäude – frei: ${Math.max(0, tallFree)}`;
+    if (plan.count > free) return `Braucht ${plan.count} ${plan.count === 1 ? 'Mast' : 'Masten'} – frei: ${Math.max(0, free)}`;
+    return null;
   }
 
   endDraw(drag) {
@@ -403,8 +522,7 @@ export class Input {
           chain.push(st);
           this.audio.snap(chain.length + 2);
         } else {
-          drag.invalidStation = st;
-          this.warnInvalid(drag, st, v, [...line.stations.slice(0, index + 1), ...chain]);
+          this.markInvalid(drag, st, v, chain.length ? chain[chain.length - 1] : a);
         }
       } else if (!chain.length && line.has(st)) {
         // Segment über eine Nachbarstation hinaus ziehen: Station wird übersprungen
@@ -413,15 +531,17 @@ export class Input {
         if (i === index - 1) list = line.stations.filter((s) => s !== a);
         else if (i === index + 2) list = line.stations.filter((s) => s !== b);
         if (list) {
-          if (g.validate(list, line).ok) {
+          const v = g.validate(list, line);
+          if (v.ok) {
             drag.bypass = st;
             drag.previewList = list;
-          } else drag.invalidStation = st;
+          } else this.markInvalid(drag, st, v, i === index - 1 ? b : a);
         }
       }
     }
     if (!st) drag.lastInvalid = null;
     drag.floatInvalid = !!drag.invalidStation;
+    drag.floatReason = drag.invalidStation ? drag.invalidText : null;
   }
 
   endSegment(drag) {

@@ -46,15 +46,51 @@ export function segIntersect(ax, ay, bx, by, cx, cy, dx, dy) {
   return t >= 0 && t <= 1 && u >= 0 && u <= 1 ? t : -1;
 }
 
-/** Deterministischer Zufallsgenerator (mulberry32). */
+/**
+ * Deterministischer Zufallsgenerator (mulberry32). Der Zustand lässt sich lesen und setzen,
+ * damit gespeicherte Spiele exakt gleich weiterlaufen.
+ */
 export function makeRng(seed) {
   let a = seed >>> 0;
-  return function rng() {
+  const rng = function rng() {
     a = (a + 0x6d2b79f5) | 0;
     let t = Math.imul(a ^ (a >>> 15), 1 | a);
     t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
+  rng.getState = () => a >>> 0;
+  rng.setState = (s) => {
+    a = s >>> 0;
+  };
+  return rng;
+}
+
+const SEED_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+/** Seed-Text vereinheitlichen: Großbuchstaben, nur Buchstaben/Ziffern, max. 12 Zeichen. */
+export function normalizeSeed(seed) {
+  const s = String(seed ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12);
+  return s || 'LAPAZ1';
+}
+
+/** 32-Bit-Hash eines Seed-Texts (FNV-1a mit Nachmischung). */
+export function hashSeed(seed) {
+  let h = 0x811c9dc5;
+  for (const ch of normalizeSeed(seed)) {
+    h ^= ch.charCodeAt(0);
+    h = Math.imul(h, 0x01000193);
+  }
+  h ^= h >>> 16;
+  h = Math.imul(h, 0x85ebca6b);
+  h ^= h >>> 13;
+  return h >>> 0;
+}
+
+/** Zufälliger, gut lesbarer Seed (ohne leicht verwechselbare Zeichen). */
+export function randomSeed(random = Math.random) {
+  let s = '';
+  for (let i = 0; i < 6; i++) s += SEED_CHARS[Math.floor(random() * SEED_CHARS.length)];
+  return s;
 }
 
 export const pick = (rng, arr) => arr[Math.floor(rng() * arr.length)];

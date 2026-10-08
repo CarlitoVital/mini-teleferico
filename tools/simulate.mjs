@@ -1,17 +1,17 @@
 // Headless-Balancing-Simulation: lässt den Bot mehrere Runden spielen.
-// Aufruf: node tools/simulate.mjs [Anzahl Runden] [Breite] [Höhe]
+// Aufruf: node tools/simulate.mjs [Anzahl Runden] [Seitenverhältnis] [Startfläche]
 import { Game } from '../src/game.js';
 import { AutoPlayer } from '../src/autoplay.js';
 
 const runs = Number(process.argv[2] || 8);
-const width = Number(process.argv[3] || 1900);
-const height = Number(process.argv[4] || 900);
+const aspect = Number(process.argv[3] || 1.9);
+const area = Number(process.argv[4] || 370000);
 const dt = 1 / 30;
 const results = [];
 
 for (let r = 0; r < runs; r++) {
-  const seed = 1000 + r * 7919;
-  const game = new Game({ width, height, seed });
+  const seed = `SIM${r}`;
+  const game = new Game({ seed, aspect, area });
   const bot = new AutoPlayer(game);
   let steps = 0;
   while (game.state !== 'over' && game.time < 3600) {
@@ -27,7 +27,7 @@ for (let r = 0; r < runs; r++) {
   const s = game.summary();
   results.push(s);
   console.log(
-    `seed ${String(seed).padStart(6)}  ${(game.time / 60).toFixed(1).padStart(5)} min  Woche ${s.week}  ` +
+    `${seed.padEnd(6)} ${s.area.padEnd(16)} ${(game.time / 60).toFixed(1).padStart(5)} min  Woche ${s.week}  ` +
       `Score ${String(s.score).padStart(4)}  Stationen ${s.stations}  Linien ${s.lines}  ` +
       `Gondeln ${s.gondolas}  Umstiege ${s.transfers}  Masten ${s.masts}  überfüllt: ${s.station}`,
   );

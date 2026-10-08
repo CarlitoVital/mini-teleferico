@@ -27,10 +27,16 @@
             <circle id="clock-arc" class="arc" cx="18" cy="18" r="14" />
           </svg>
           <div class="clock-text"><span id="clock-day">Mo 06:00</span><span id="clock-week">Woche 1</span></div>
+          <svg id="illimani" class="illimani" viewBox="0 0 32 18" role="img" aria-label="Illimani">
+            <path class="mtn" d="M0 18 6 11.2l3 1.4 3-5.1 2 1.5 3-5 2.5 2.5L22 3l3.5 5 2.6 2.6L32 18Z" />
+            <path class="snow" d="m9.6 11.7 2.4-4.2 2 1.5 3-5 2.5 2.5L22 3l3.5 5 1.1 1.2-2.3.6-1.7-1.5-1.6 1.3-1.8-1.2-1.8 1.4-1.8-.9-2 1.7-1.8-.7Z" />
+          </svg>
         </div>
         <span id="rush" class="badge" hidden>Stoßzeit</span>
+        <div id="hud-meta" class="hud-meta"></div>
       </div>
       <div class="hud-right">
+        <button id="btn-center" class="icon-btn" hidden aria-label="Ansicht zentrieren (C)" title="Ansicht zentrieren (C)"></button>
         <button id="btn-pause" class="icon-btn" aria-label="Pause (Leertaste)" title="Pause (Leertaste)"></button>
         <button id="btn-speed" class="icon-btn txt" aria-label="Spielgeschwindigkeit" title="Tempo 1×/2× (Tasten 1 und 2)">1×</button>
         <button id="btn-sound" class="icon-btn" aria-label="Ton an/aus" title="Ton an/aus (M)"></button>
@@ -52,6 +58,9 @@
           <button class="res" data-kind="masts" data-label="Masten" title="Masten – werden beim Bauen automatisch gesetzt" aria-label="Masten">
             <span class="count">0</span>
           </button>
+          <button class="res" data-kind="tall" data-label="hohen Masten" title="Hoher Mast – überspannt ein einzelnes blockierendes Gebäude (automatisch)" aria-label="Hohe Masten" hidden>
+            <span class="count">0</span>
+          </button>
           <button class="res" data-kind="cabin" data-label="großen Kabinen" title="Große Kabine – auf eine Gondel ziehen" aria-label="Große Kabinen">
             <span class="count">0</span>
           </button>
@@ -62,6 +71,10 @@
       </div>
     </footer>
 
+    <div id="user-chip" class="user-chip" hidden>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.6" /><path d="M5 20.5c.7-4.3 3.5-6.6 7-6.6s6.3 2.3 7 6.6z" /></svg>
+      <span id="user-name"></span>
+    </div>
     <div id="paused" class="paused-banner" hidden>Pausiert<span class="kbd-only"> · Leertaste zum Fortsetzen</span></div>
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
@@ -78,12 +91,25 @@
         </svg>
         <h1>Teleférico</h1>
         <p class="tagline">Baue das Seilbahnnetz zwischen El Alto, dem Zentrum und der Zona Sur.</p>
+        <div class="seed-row">
+          <label for="seed-input">Seed</label>
+          <input id="seed-input" type="text" maxlength="12" placeholder="zufällig" autocomplete="off" autocapitalize="characters" spellcheck="false" />
+          <button id="btn-dice" class="icon-btn small" type="button" aria-label="Zufälligen Seed würfeln" title="Zufälligen Seed würfeln">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="17" height="17" rx="4" class="stroke" /><circle cx="8.5" cy="8.5" r="1.5" /><circle cx="15.5" cy="15.5" r="1.5" /><circle cx="15.5" cy="8.5" r="1.5" /><circle cx="8.5" cy="15.5" r="1.5" /><circle cx="12" cy="12" r="1.5" /></svg>
+          </button>
+        </div>
         <button id="btn-play" class="btn primary">Spielen</button>
+        <div class="menu-row">
+          <button id="btn-continue" class="btn small" hidden>Weiterspielen</button>
+          <button id="btn-saves" class="btn small">Spielstände</button>
+          <button id="btn-account" class="btn small">Anmelden</button>
+          <button id="btn-board" class="btn small" hidden>Bestenliste</button>
+        </div>
         <p id="best" class="best"></p>
         <ul class="rules">
           <li>
             <svg class="r-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 18 19 6" class="ln" /><circle cx="5" cy="18" r="3.2" class="st" /><rect x="16" y="3" width="6" height="6" class="st" /></svg>
-            Ziehe von Station zu Station, um eine Seilbahnlinie zu spannen.
+            Ziehe von Station zu Station, um eine Seilbahnlinie zu spannen. Mausrad, Rechtsklick oder zwei Finger bewegen die Karte.
           </li>
           <li>
             <svg class="r-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 9.5 8.5 15.5H1.5z" class="fill" /><path d="m11 12.5h4" class="ar" /><path d="m13.5 10 2.5 2.5-2.5 2.5" class="ar" /><path d="M20 9 23.5 15H16.5z" class="st" /></svg>
@@ -91,7 +117,11 @@
           </li>
           <li>
             <svg class="r-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 6h20" class="ar" /><path d="M9 21 11.3 7h1.4L15 21z" class="fill" /><path d="M7.5 5.2h9v2h-9z" class="fill" /></svg>
-            Lange Spannweiten und Schluchten brauchen Masten. Bergauf sind Gondeln langsamer.
+            Steile Kanten, tiefe Schluchten, Bergrücken und lange Spannweiten brauchen Masten. Bergauf sind Gondeln langsamer.
+          </li>
+          <li>
+            <svg class="r-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="4" width="6" height="16" class="fill" /><rect x="13" y="9" width="6" height="11" class="fill" /><path d="M2 3 22 21" class="no" /></svg>
+            Über dunkle Gebäude – Hochhäuser, Flughafen, Stadien, Spitäler, Kasernen – darf kein Seil führen.
           </li>
           <li>
             <svg class="r-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" class="ring" /><path d="M12 12V3a9 9 0 0 1 8.6 11.7z" class="warn" /><circle cx="12" cy="12" r="3.6" class="st" /></svg>
@@ -99,7 +129,7 @@
           </li>
         </ul>
         <div class="start-foot">
-          <span class="kbd-only">Leertaste Pause · 1/2 Tempo · Entf Linie löschen</span>
+          <span class="kbd-only">Leertaste Pause · 1/2 Tempo · Entf Linie löschen · C Zentrieren</span>
           <button id="start-sound" class="link-btn">Ton: an</button>
         </div>
       </div>
@@ -121,8 +151,10 @@
         <div class="big-score"><span id="over-score">0</span><small>Fahrgäste befördert</small></div>
         <p id="over-record" class="record" hidden>Neuer Rekord!</p>
         <dl id="over-stats" class="stats"></dl>
+        <p id="over-meta" class="note"></p>
         <div class="actions">
-          <button id="btn-again" class="btn primary">Nochmal spielen</button>
+          <button id="btn-again" class="btn primary">Neue Runde</button>
+          <button id="btn-same" class="btn">Gleicher Seed</button>
           <button id="btn-home" class="btn">Hauptmenü</button>
         </div>
       </div>
@@ -131,11 +163,67 @@
     <section id="screen-menu" class="screen modal" hidden>
       <div class="panel menu-panel" role="dialog" aria-modal="true" aria-labelledby="menu-title">
         <h2 id="menu-title">Pause</h2>
+        <p id="menu-meta" class="note"></p>
         <div class="actions vertical">
           <button id="btn-resume" class="btn primary">Weiterspielen</button>
-          <button id="btn-restart" class="btn">Neu starten</button>
+          <button id="btn-save" class="btn">Spiel speichern</button>
+          <button id="btn-restart" class="btn">Neu starten (gleicher Seed)</button>
           <button id="btn-quit" class="btn">Hauptmenü</button>
         </div>
+      </div>
+    </section>
+
+    <section id="screen-saves" class="screen modal" hidden>
+      <div class="panel saves-panel" role="dialog" aria-modal="true" aria-labelledby="saves-title">
+        <p class="eyebrow" id="saves-eyebrow">Spielstände</p>
+        <h2 id="saves-title">Laden</h2>
+        <div id="saves-list" class="saves-list"></div>
+        <p id="saves-note" class="note"></p>
+        <div class="actions">
+          <button id="btn-import" class="btn small" hidden>Lokale Spielstände ins Konto übernehmen</button>
+          <button id="btn-saves-close" class="btn">Schließen</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="screen-account" class="screen modal" hidden>
+      <div class="panel account-panel" role="dialog" aria-modal="true" aria-labelledby="account-title">
+        <p class="eyebrow">Konto</p>
+        <h2 id="account-title">Anmelden</h2>
+        <p id="account-offline" class="note" hidden>
+          Konten gibt es nur, wenn das Spiel über den eigenen Server läuft (<code>npm start</code>). Als Gast werden Spielstände lokal im Browser gespeichert.
+        </p>
+        <form id="auth-form" class="auth-form" novalidate>
+          <div class="tabs" role="tablist">
+            <button type="button" class="tab active" data-mode="login" role="tab" aria-selected="true">Anmelden</button>
+            <button type="button" class="tab" data-mode="register" role="tab" aria-selected="false">Registrieren</button>
+          </div>
+          <label>Benutzername
+            <input id="auth-user" name="username" autocomplete="username" maxlength="24" spellcheck="false" autocapitalize="none" />
+          </label>
+          <label>Passwort
+            <input id="auth-pass" name="password" type="password" autocomplete="current-password" maxlength="128" />
+          </label>
+          <p id="auth-hint" class="note small">3–24 Zeichen (Buchstaben, Ziffern, _ . -) · Passwort mindestens 8 Zeichen</p>
+          <p id="auth-error" class="form-error" role="alert"></p>
+          <button type="submit" class="btn primary" id="auth-submit">Anmelden</button>
+        </form>
+        <div id="account-info" class="account-info" hidden>
+          <p>Angemeldet als <strong id="account-name"></strong></p>
+          <h3>Deine besten Runden</h3>
+          <ol id="my-scores" class="score-list"></ol>
+          <div class="actions"><button id="btn-logout" class="btn">Abmelden</button></div>
+        </div>
+        <div class="actions"><button id="btn-account-close" class="btn">Schließen</button></div>
+      </div>
+    </section>
+
+    <section id="screen-board" class="screen modal" hidden>
+      <div class="panel board-panel" role="dialog" aria-modal="true" aria-labelledby="board-title">
+        <p class="eyebrow">Alle Spieler</p>
+        <h2 id="board-title">Bestenliste</h2>
+        <ol id="board-list" class="score-list"></ol>
+        <div class="actions"><button id="btn-board-close" class="btn">Schließen</button></div>
       </div>
     </section>
 

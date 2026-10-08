@@ -1,0 +1,4 @@
+node_modules/
+server/data/
+# Kartenausschnitt (Google Maps) nur als lokale Referenz – nicht einchecken
+reference/la-paz-topo.png

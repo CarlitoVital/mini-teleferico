@@ -39,10 +39,10 @@ function check(game, seed) {
 
 let totalEdits = 0;
 for (let r = 0; r < runs; r++) {
-  const seed = 500 + r * 104729;
-  const rng = makeRng(seed ^ 0x9e3779b9);
-  const game = new Game({ width: 1500 + r * 13, height: 900, seed });
-  game.res = { lines: 6, gondolas: 10, masts: 8, cabins: 4, interchanges: 3 };
+  const seed = `STRESS${r}`;
+  const rng = makeRng(r * 104729 + 7);
+  const game = new Game({ seed, aspect: 0.6 + (r % 5) * 0.35, area: 250000 + r * 9000 });
+  game.res = { lines: 6, gondolas: 10, masts: 30, tallMasts: 4, cabins: 4, interchanges: 3 };
   let steps = 0;
   while (game.state !== 'over' && game.time < 900) {
     if (game.state === 'reward') game.chooseReward(game.rewardOptions[Math.floor(rng() * 2)]);

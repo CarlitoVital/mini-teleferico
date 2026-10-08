@@ -1,8 +1,9 @@
 // Spielzustand und Regeln – ohne DOM, daher auch headless (Node) lauffähig.
 import { CONFIG, COMMON_SHAPES, RARE_SHAPES, DAY_NAMES, DAY_NAMES_LONG, LINE_COLORS } from './config.js';
-import { makeRng, clamp, pick, pickWeighted, shuffle } from './util.js';
-import { CityMap, BANDS } from './map.js';
-import { Station, STATION_NAMES } from './station.js';
+import { makeRng, clamp, pick, pickWeighted, shuffle, hashSeed, normalizeSeed } from './util.js';
+import { CityMap } from './map.js';
+import { START_AREAS, MAP } from './data/terrain.js';
+import { Station } from './station.js';
 import { Line, pairKey } from './line.js';
 import { Gondola } from './gondola.js';
 import { Passenger, Router } from './passenger.js';
@@ -27,7 +28,8 @@ const RARE = new Set(RARE_SHAPES);
 export const REWARDS = {
   line: { title: 'Neue Linie', text: 'Eine weitere Seilbahnlinie zum Bauen.' },
   gondola: { title: 'Gondel', text: 'Eine zusätzliche Gondel für eine beliebige Linie.' },
-  masts: { title: '2 Masten', text: 'Für lange Spannweiten und Schluchtquerungen.' },
+  masts: { title: '2 Masten', text: 'Für lange Spannweiten, Schluchten, steile Kanten und Bergrücken.' },
+  tall: { title: 'Hoher Mast', text: 'Ein Seil darf ein einzelnes Hochhaus, Stadion, Spital oder eine Kaserne überspannen.' },
   cabin: { title: 'Große Kabine', text: `Eine Gondel fasst ${CONFIG.bigCabinCapacity} statt ${CONFIG.gondolaCapacity} Fahrgäste.` },
   interchange: {
     title: 'Umsteigestation',
@@ -36,11 +38,29 @@ export const REWARDS = {
 };
 
 export class Game {
-  constructor({ width, height, seed = 1, demo = false }) {
-    this.seed = seed;
-    this.rng = makeRng(seed);
-    this.map = new CityMap(width, height, this.rng);
+  /**
+   * @param {object} opts
+   * @param {string} opts.seed   – Seed-Text; gleicher Seed = gleiche Karte (Startgebiet, Gebäude, Startstationen)
+   * @param {number} opts.aspect – Seitenverhältnis des Sichtbereichs (für die Form des Startbereichs)
+   * @param {number} opts.area   – Fläche des Startbereichs in Welt-Einheiten²
+   */
+  constructor({ seed = 'LAPAZ1', aspect = 1.8, area = 370000, demo = false, restore = false } = {}) {
+    this.seed = normalizeSeed(seed);
+    const seedNum = hashSeed(this.seed);
+    // Getrennte Zufallsströme: Karte (unabhängig vom Spielverlauf) und Spielgeschehen
+    const mapRng = makeRng(seedNum ^ 0x5bd1e995);
+    this.rng = makeRng(seedNum);
+    this.map = new CityMap({ seed: seedNum });
     this.demo = demo;
+    const K = MAP.unitsPerKm;
+    const area0 = pick(mapRng, START_AREAS);
+    this.startArea = {
+      name: area0.name,
+      x: (area0.x + (mapRng() - 0.5) * 0.8) * K,
+      y: (area0.y + (mapRng() - 0.5) * 0.8) * K,
+    };
+    this.aspect = clamp(aspect, 0.45, 2.4);
+    this.area0 = area;
     this.time = 0;
     this.state = 'playing'; // 'playing' | 'reward' | 'over'
     this.stations = [];
@@ -57,11 +77,15 @@ export class Game {
     this.handlers = new Map();
     this.overStation = null;
     this.nextLineId = 1;
+    this.nextGondolaId = 1;
+    this.nextPassengerId = 1;
     this.rewardOptions = null;
     this.maxOvercrowd = 0;
     this.stats = { delivered: 0, transfers: 0, spawned: 0, linesBuilt: 0, maxWaiting: 0 };
-    this.maxStations = clamp(Math.round((width * height) / 36000), 20, 40);
-    this.spawnInitialStations();
+    const finalArea = area * CONFIG.regionMaxGrowth ** 2;
+    this.maxStations = clamp(Math.round(finalArea / 36000), 20, 40);
+    // Beim Laden eines Spielstands werden die Stationen aus dem Speicher übernommen
+    if (!restore) this.spawnInitialStations(makeRng(seedNum ^ 0x27d4eb2f));
   }
 
   // ------------------------------------------------------------ Ereignisse
@@ -102,32 +126,40 @@ export class Game {
     return `${this.dayName} ${String(h).padStart(2, '0')}:${String(m - (m % 10)).padStart(2, '0')}`;
   }
 
-  /** Aktuell bebauter Stadtbereich (wächst mit der Zeit). */
+  /** Wachstumsfaktor der Kantenlänge des Stadtbereichs. */
+  growth() {
+    const w = this.weeksElapsed;
+    const g = 1 + (CONFIG.regionGrowth - 1) * Math.min(1, w / CONFIG.regionFullWeeks);
+    return Math.min(CONFIG.regionMaxGrowth, g + Math.max(0, w - CONFIG.regionFullWeeks) * 0.06);
+  }
+
+  /** Aktuell bebauter Stadtbereich um den Startpunkt (wächst mit der Zeit). */
   region() {
-    const f = clamp(
-      CONFIG.regionStart + (1 - CONFIG.regionStart) * (this.weeksElapsed / CONFIG.regionFullWeeks),
-      CONFIG.regionStart,
-      1,
-    );
-    return this.regionRect(f);
+    return this.regionRect(this.growth());
   }
 
   /** Kamerabereich: wie region(), aber in kleinen Stufen (ruhige Kamera, Hintergrund-Cache). */
   viewRegion() {
-    const f = Math.min(1, Math.ceil(this.region().f / 0.025 - 1e-9) * 0.025);
-    return this.regionRect(f);
+    return this.regionRect(Math.ceil(this.growth() / 0.05 - 1e-9) * 0.05);
   }
 
-  regionRect(f) {
+  regionRect(g) {
     const { W, H } = this.map;
-    return { x: W * (1 - f) * 0.5, y: H * (1 - f) * 0.5, w: W * f, h: H * f, f };
+    const w = Math.min(W, Math.sqrt(this.area0 * this.aspect) * g);
+    const h = Math.min(H, Math.sqrt(this.area0 / this.aspect) * g);
+    const x = clamp(this.startArea.x - w / 2, 0, W - w);
+    const y = clamp(this.startArea.y - h / 2, 0, H - h);
+    return { x, y, w, h, g };
   }
 
   // ------------------------------------------------------------ Spawning
-  bandWeights() {
-    // Anfangs wächst das Zentrum, später vor allem El Alto und die Zona Sur.
+  /** Gewicht je Zone: anfangs wächst das Zentrum, später vor allem El Alto und die Zona Sur. */
+  zoneWeight(zone) {
     const w = this.weeksElapsed;
-    return [0.55 + 0.35 * w, 0.8, Math.max(0.5, 1.2 - 0.12 * w), 0.55 + 0.32 * w];
+    if (zone === 'alto') return 0.6 + 0.35 * w;
+    if (zone === 'sur') return 0.6 + 0.32 * w;
+    if (zone === 'centro') return Math.max(0.5, 1.2 - 0.12 * w);
+    return 0.7;
   }
 
   stationInterval() {
@@ -141,25 +173,30 @@ export class Game {
     );
   }
 
-  spawnInitialStations() {
-    const shapes = shuffle(this.rng, COMMON_SHAPES);
+  /** Drei Startstationen nahe dem Startpunkt – unabhängig von der Bildschirmgröße. */
+  spawnInitialStations(rng) {
+    const shapes = shuffle(rng, COMMON_SHAPES);
+    const c = this.startArea;
     for (const shape of shapes) {
-      let spot = this.map.findSpot(this.rng, this.stations, [], this.regionRect(0.36), [0.7, 1, 1.1, 0.8], {
-        minDist: 115,
-        maxNear: 240,
-      });
-      if (!spot) spot = this.map.findSpot(this.rng, this.stations, [], this.regionRect(0.6), [1, 1, 1, 1]);
-      if (!spot) {
-        const r = this.regionRect(0.4);
-        spot = { x: r.x + r.w * (0.2 + 0.3 * this.stations.length), y: r.y + r.h * 0.4 };
+      let spot = null;
+      for (const r of [260, 340, 440, 600, 900]) {
+        const box = { x: c.x - r, y: c.y - r, w: 2 * r, h: 2 * r };
+        spot = this.map.findSpot(rng, this.stations, [], box, () => 1, {
+          minDist: 110,
+          maxNear: 260,
+          tries: 220,
+          circle: { x: c.x, y: c.y, r },
+        });
+        if (spot) break;
       }
+      if (!spot) spot = { x: c.x + (this.stations.length - 1) * 120, y: c.y };
       this.addStation(spot, shape);
     }
   }
 
   spawnStation() {
     const segs = this.activeSegments();
-    const spot = this.map.findSpot(this.rng, this.stations, segs, this.region(), this.bandWeights());
+    const spot = this.map.findSpot(this.rng, this.stations, segs, this.region(), (z) => this.zoneWeight(z));
     if (!spot) return null;
     const shape = this.pickNewShape();
     const st = this.addStation(spot, shape);
@@ -168,16 +205,15 @@ export class Game {
   }
 
   addStation(spot, shape) {
-    const band = this.map.bandAt(spot.x, spot.y);
-    const elev = BANDS[band].elev + Math.round((this.rng() - 0.5) * 8) * 10;
+    const name = this.map.nameFor(spot.x, spot.y, this.usedNames);
+    this.usedNames.add(name);
     const st = new Station({
       id: this.stations.length,
       x: spot.x,
       y: spot.y,
       shape,
-      band,
-      elev,
-      name: this.pickName(band),
+      elev: Math.round(this.map.heightAt(spot.x, spot.y)),
+      name,
       born: this.time,
     });
     st.nextSpawn = this.passengerInterval() * (0.5 + this.rng() * 0.8);
@@ -186,14 +222,6 @@ export class Game {
     this.effects.push({ kind: 'ring', x: st.x, y: st.y, t0: this.time, dur: 1.6 });
     this.emit('station', st);
     return st;
-  }
-
-  pickName(band) {
-    const free = STATION_NAMES[band].filter((n) => !this.usedNames.has(n));
-    const all = STATION_NAMES.flat().filter((n) => !this.usedNames.has(n));
-    const name = free.length ? pick(this.rng, free) : all.length ? pick(this.rng, all) : `Estación ${this.stations.length + 1}`;
-    this.usedNames.add(name);
-    return name;
   }
 
   shapeCounts() {
@@ -230,7 +258,7 @@ export class Game {
     const shape = this.pickTargetShape(st.shape);
     if (!shape) return;
     if (this.demo && st.waiting.length >= st.capacity) return;
-    st.waiting.push(new Passenger(shape, this.time));
+    st.waiting.push(new Passenger(shape, this.time, this.nextPassengerId++));
     this.stats.spawned++;
   }
 
@@ -314,13 +342,15 @@ export class Game {
       masts: this.mastsUsed,
       longest: active.reduce((m, l) => Math.max(m, l.stations.length), 0),
       station: this.overStation ? this.overStation.name : null,
+      seed: this.seed,
+      area: this.startArea.name,
     };
   }
 
   // ------------------------------------------------------------ Wochen-Belohnungen
   startWeek() {
     this.res.gondolas += 1; // jede Woche eine neue Gondel
-    const pool = ['gondola', 'masts', 'cabin', 'interchange'];
+    const pool = ['gondola', 'masts', 'cabin', 'interchange', 'tall'];
     if (this.res.lines < CONFIG.maxLines) pool.push('line', 'line');
     const opts = [];
     while (opts.length < 2) {
@@ -337,6 +367,7 @@ export class Game {
     if (kind === 'line') this.res.lines = Math.min(CONFIG.maxLines, this.res.lines + 1);
     else if (kind === 'gondola') this.res.gondolas += 1;
     else if (kind === 'masts') this.res.masts += 2;
+    else if (kind === 'tall') this.res.tallMasts += 1;
     else if (kind === 'cabin') this.res.cabins += 1;
     else if (kind === 'interchange') this.res.interchanges += 1;
     this.rewardOptions = null;
@@ -371,6 +402,16 @@ export class Game {
     return this.res.masts - this.mastsUsed;
   }
 
+  get tallMastsUsed() {
+    let n = 0;
+    for (const l of this.lines) if (l.active) n += l.tallCount;
+    return n;
+  }
+
+  get tallMastsFree() {
+    return this.res.tallMasts - this.tallMastsUsed;
+  }
+
   get cabinsFree() {
     let used = 0;
     for (const g of this.gondolas) if (g.big) used++;
@@ -401,6 +442,12 @@ export class Game {
     return this.offsets.get(`${line.id}|${pairKey(a, b)}`) || 0;
   }
 
+  tallFor(list) {
+    let n = 0;
+    for (let i = 0; i < list.length - 1; i++) n += this.map.mastPlan(list[i], list[i + 1]).tall;
+    return n;
+  }
+
   mastsFor(list) {
     let n = 0;
     for (let i = 0; i < list.length - 1; i++) n += this.map.mastPlan(list[i], list[i + 1]).count;
@@ -410,10 +457,20 @@ export class Game {
   /** Prüft eine Stationsfolge (für neue oder geänderte Linie) auf Gültigkeit. */
   validate(list, line = null) {
     if (new Set(list).size !== list.length) return { ok: false, reason: 'dup' };
-    const masts = this.mastsFor(list);
-    const free = this.mastsFree + (line && line.active ? line.mastCount : 0);
+    let masts = 0;
+    let tall = 0;
+    for (let i = 0; i < list.length - 1; i++) {
+      const plan = this.map.mastPlan(list[i], list[i + 1]);
+      if (plan.blocked) return { ok: false, reason: 'blocked', plan, a: list[i], b: list[i + 1] };
+      masts += plan.count;
+      tall += plan.tall;
+    }
+    const own = line && line.active;
+    const free = this.mastsFree + (own ? line.mastCount : 0);
+    const tallFree = this.tallMastsFree + (own ? line.tallCount : 0);
     if (masts > free) return { ok: false, reason: 'masts', masts, free };
-    return { ok: true, masts, free };
+    if (tall > tallFree) return { ok: false, reason: 'tall', tall, tallFree };
+    return { ok: true, masts, free, tall, tallFree };
   }
 
   networkChanged() {
@@ -500,7 +557,7 @@ export class Game {
   addGondola(line, near, opts = {}) {
     if (this.gondolasFree <= 0 || !line.active || line.stations.length < 2) return null;
     const st = near ? this.nearestOnLine(line, near) : line.stations[0];
-    const g = new Gondola(line, st);
+    const g = new Gondola(line, st, this.nextGondolaId++);
     if (opts.big && this.cabinsFree > 0) g.big = true;
     this.gondolas.push(g);
     line.gondolas.push(g);
