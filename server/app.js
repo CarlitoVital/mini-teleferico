@@ -563,7 +563,6 @@ export function createApp({
       setHeaders: (res) => res.setHeader('Cache-Control', 'no-cache'),
     }),
   );
-  app.use('/reference', express.static(path.join(ROOT_DIR, 'reference'), { index: false, redirect: false, maxAge: '1d' }));
 
   app.use((req, res) => {
     res.status(404).type('text/plain').send('Nicht gefunden');

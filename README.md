@@ -1,12 +1,34 @@
 # Teleférico
 
-Ein minimalistisches Seilbahn-Strategiespiel im Browser. Du baust das Seilbahnnetz von **La Paz und El Alto** (Bolivien): vom Hochplateau El Alto (~4050 m) über die Hänge und das Zentrum im Talkessel (~3600 m) bis hinunter in die Zona Sur (~3300 m) – mit dem Illimani im Hintergrund.
+Ein minimalistisches Seilbahn-Strategiespiel im Browser. Du baust das Seilbahnnetz von **La Paz und El Alto** (Bolivien) – auf einer Karte, die der echten Topografie nachempfunden ist: das Hochplateau von El Alto (~4050 m), die zerklüftete Abbruchkante der *Ceja*, der Talkessel des Zentrums (~3600 m), das Tal des Río Choqueyapu und die Zona Sur (~3250 m).
 
-Reines HTML5-Canvas und Vanilla JavaScript (ES-Module), ohne Build-Schritt und ohne externe Abhängigkeiten. Läuft am Desktop mit Maus und auf dem Handy mit Touch.
+Das Spiel selbst ist reines HTML5-Canvas und Vanilla JavaScript (ES-Module) ohne Build-Schritt. Es läuft am Desktop mit Maus und auf dem Handy mit Touch. Ein optionaler kleiner Node.js-Server ergänzt Konten, Spielstände im Konto und eine Bestenliste.
 
 ## Starten
 
-Im Projektordner einen kleinen lokalen Server starten und die angezeigte Adresse im Browser öffnen:
+### Mit Server (Konten, Speichern im Konto, Bestenliste)
+
+Voraussetzung: Node.js 18 oder neuer.
+
+```bash
+npm install
+npm start          # → http://localhost:3000
+```
+
+Der Server liefert das Spiel aus und stellt die API unter `/api` bereit. Die Daten liegen in einer SQLite-Datei (`server/data/teleferico.db`, wird automatisch angelegt). Einstellungen über Umgebungsvariablen:
+
+| Variable | Bedeutung |
+| --- | --- |
+| `PORT` | Port des Servers (Standard `3000`) |
+| `TELEFERICO_DB` | Pfad zur SQLite-Datenbank |
+| `COOKIE_SECURE=1` | Sitzungs-Cookie nur über HTTPS senden (für den Betrieb hinter HTTPS) |
+| `TRUST_PROXY` | Hinter einem Reverse-Proxy: `1` (ein Proxy), eine Anzahl oder IP-/CIDR-Liste – damit das Rate-Limit die echte Client-IP sieht |
+
+Tests (Server-API, Spielstände, Frontend-Erkennung): `npm test`
+
+### Ohne Server (nur Gastmodus)
+
+Jeder einfache statische Webserver genügt; Konten gibt es dann nicht, alles andere funktioniert:
 
 ```bash
 npx serve .
@@ -14,27 +36,50 @@ npx serve .
 python3 -m http.server 8000   # dann http://localhost:8000 öffnen
 ```
 
-> **Hinweis zu `file://`:** Die `index.html` lässt sich auch direkt per Doppelklick öffnen. Viele Browser (z. B. Chrome, Edge, Safari) blockieren dabei aber JavaScript-Module. In dem Fall zeigt das Spiel einen Hinweis mit den Befehlen oben an.
+> **Hinweis zu `file://`:** Viele Browser blockieren JavaScript-Module, wenn die `index.html` direkt von der Festplatte geöffnet wird. Das Spiel zeigt dann einen Hinweis mit den Befehlen oben an.
 
 ## Spielregeln
 
 **Ziel:** Bring so viele Fahrgäste wie möglich ans Ziel. Der Punktestand ist die Zahl der beförderten Fahrgäste.
 
-- **Stationen** erscheinen nach und nach als Formen: Kreis, Dreieck, Quadrat – später auch seltene Formen (Raute, Stern, Kreuz). Anfangs wächst vor allem das Zentrum, später breitet sich die Stadt besonders in El Alto und der Zona Sur aus.
-- **Fahrgäste** tauchen als kleine Formen neben den Stationen auf. Jeder will zu *irgendeiner* Station mit seiner Form. Sie wählen selbst den besten Weg durchs Netz und steigen dafür auch um.
-- **Linien** ziehst du von Station zu Station. Seilbahnen fahren nur auf **geraden Seilstrecken** – die Richtung ändert sich ausschließlich an Stationen. Mehrere Linien auf derselben Strecke laufen nebeneinander.
+- **Stationen** erscheinen nach und nach als Formen: Kreis, Dreieck, Quadrat – später auch seltene Formen (Raute, Stern, Kreuz). Sie tragen Namen realer Stadtteile und entstehen bevorzugt dort, wo bebaute Stadt ist.
+- **Fahrgäste** tauchen als kleine Formen neben den Stationen auf. Jeder will zu *irgendeiner* Station mit seiner Form, wählt selbst den besten Weg durchs Netz und steigt dafür auch um.
+- **Linien** ziehst du von Station zu Station. Seilbahnen fahren nur auf **geraden Seilstrecken** – die Richtung ändert sich ausschließlich an Stationen.
 - **Gondeln** pendeln automatisch zwischen den Endstationen einer Linie. Jede Kabine fasst 6 Fahrgäste (große Kabine: 10).
-- **Masten:** Jede Seilstrecke hat eine maximale Spannweite. Längere Strecken brauchen Masten, und jede **Schlucht** (Río Choqueyapu, Río Orkojahuira) lässt sich nur mit einem Mast überqueren. Masten sind begrenzt und werden beim Bauen automatisch gesetzt; reichen sie nicht, färbt sich die Vorschau rot. Baust du eine Strecke ab, bekommst du ihre Masten zurück.
+- **Überfüllung:** Warten an einer Station mehr als 6 Fahrgäste (Umsteigestation: 12), füllt sich ein Kreis-Timer. Ist er voll, ist das Spiel vorbei. Sinkt die Zahl wieder, läuft der Timer langsam zurück.
+- **Tageszeit:** Morgens und abends ist Stoßzeit, nachts ist es ruhiger und die Karte wird dunkler. Das kleine Illimani-Symbol neben der Uhr färbt sich mit der Tageszeit.
+- **Wochen:** Zu Beginn jeder Woche gibt es eine neue Gondel und du wählst **eine von zwei Belohnungen**: *Neue Linie* (bis zu 10 Farben), *Gondel*, *2 Masten*, *Hoher Mast*, *Große Kabine* oder *Umsteigestation*.
+- **Wachsende Stadt:** Die Runde beginnt in einem kleinen Ausschnitt rund um das Startgebiet. Woche für Woche wächst der bespielbare Bereich, die Kamera zoomt mit heraus. Eine typische Runde dauert 5–15 Minuten.
+
+### Gelände
+
+Die Karte ist ca. 25 × 20 km groß (Norden oben) und aus Kontrollpunkten in `src/data/terrain.js` berechnet: Höhenbänder in flachen Farben, feine Höhenlinien, die gestrichelte Abbruchkante der Ceja, Flüsse und Schluchten in Blau sowie kleine Ortsnamen.
+
+- **Masten** werden beim Bauen automatisch gesetzt und kommen aus deinem Vorrat. Gebraucht werden sie
+  - für Spannweiten über 2,3 km,
+  - über jeder **Schlucht**, die mindestens 35 m tief ist (Choqueyapu, Orkojahuira, Irpavi, Achocalla und viele Seitenquebradas),
+  - an **steilen Kanten** wie der Ceja (mehr als 70 m Höhenunterschied auf 240 m),
+  - wo ein Bergrücken das Seil berühren würde (das Seil hängt zwischen 18 m hohen Stationstürmen und 30 m hohen Masten und braucht 12 m Bodenabstand).
+  Reicht der Vorrat nicht, wird die Vorschau rot gestrichelt. Baust du eine Strecke ab, bekommst du ihre Masten zurück.
 - **Höhe:** Gondeln fahren bergauf Richtung El Alto langsamer und bergab etwas schneller.
-- **Überfüllung:** Warten an einer Station mehr als 6 Fahrgäste (Umsteigestation: 12), füllt sich um sie herum ein Kreis-Timer. Ist er voll, ist das Spiel vorbei. Sinkt die Zahl wieder, läuft der Timer langsam zurück.
-- **Tageszeit:** Morgens und abends ist Stoßzeit mit deutlich mehr Fahrgästen, nachts ist es ruhiger (und die Karte wird etwas dunkler).
-- **Wochen:** Zu Beginn jeder Woche bekommst du eine neue Gondel und wählst **eine von zwei Belohnungen**:
-  - *Neue Linie* – eine weitere Linienfarbe (bis zu 10: Rot, Gelb, Grün, Blau, Orange, Weiß, Hellblau, Violett, Braun, Silber)
-  - *Gondel* – eine zusätzliche Kabine
-  - *2 Masten* – für weitere Schluchtquerungen und lange Spannweiten
-  - *Große Kabine* – eine Gondel fasst 10 statt 6 Fahrgäste
-  - *Umsteigestation* – Station fasst 12 Fahrgäste, Ein- und Umsteigen geht doppelt so schnell
-- Mit der Zeit erscheinen Stationen und Fahrgäste immer schneller. Eine typische Runde dauert 5–15 Minuten.
+- **Bauplätze:** Stationen entstehen nur auf bebaubarem Gelände – nicht in Schluchten und Flüssen und nicht an Hängen steiler als etwa 19 %.
+
+### Gebäude
+
+Die Bebauung wird aus dem Seed erzeugt und folgt den Stadtgebieten (Schachbrett in El Alto, Hangsiedlungen am Kessel, Gartenstadt in der Zona Sur):
+
+- **Überbaubar** (hellgrau): Wohnhäuser, Märkte, Plätze, Felder. Seile dürfen darüber hinweg.
+- **Blockierend** (dunkel, mit Symbol): Hochhäuser im Zentrum und in der Zona Sur, Stadien, Spitäler mit Hubschrauberlandeplatz, Kasernen sowie der **Flughafen El Alto samt Anflugschneise**.
+
+Beim Ziehen prüft das Spiel jede Seilstrecke sofort: Ungültige Strecken werden rot gestrichelt, lassen sich nicht bauen, und ein kurzer Hinweis nennt den Grund (z. B. „Flughafen-Sperrzone: kein Seil über Flughafen und Einflugschneise.“, „Hier braucht das Seil 1 hohen Mast über Gebäude – frei: 0.“ oder „Zu wenig Masten: …“). Mit der Belohnung **Hoher Mast** darf ein Seil ein *einzelnes* Hochhaus, Stadion, Spital oder eine Kaserne überspannen – der Flughafen bleibt tabu. Masten werden automatisch neben blockierende Gebäude gesetzt. Fährst du mit der Maus über ein Gebäude (Touch: kurz antippen), zeigt ein Tooltip, was es ist.
+
+### Seeds und Startgebiete
+
+Jede Runde beginnt in einem zufälligen Startgebiet – Zentrum, El Alto, Zona Sur, Achocalla, Ovejuyo, Villa Fátima oder Ciudad Satélite – mit drei Startstationen. Alles Zufällige (Startgebiet, Gebäude, Startstationen, Spielverlauf) hängt an einem **Seed** und einem eigenen Zufallsgenerator: **gleicher Seed = gleiche Karte und gleicher Start.**
+
+- Der Seed steht im Startbildschirm, im Menü und auf dem Game-Over-Bildschirm.
+- Im Startbildschirm kannst du einen eigenen Seed eingeben (Buchstaben und Ziffern, bis 12 Zeichen) oder mit dem Würfel einen neuen erzeugen.
+- „Gleicher Seed“ bzw. „Neu starten (gleicher Seed)“ spielt dieselbe Karte noch einmal.
 
 ## Steuerung
 
@@ -44,48 +89,97 @@ python3 -m http.server 8000   # dann http://localhost:8000 öffnen
 | Linie verlängern | Am **T-Ende** einer Linie greifen und zu neuen Stationen ziehen |
 | Linie kürzen | Am T-Ende greifen und über die vorletzte Station zurückziehen (bis zu einer Station = Linie löschen) |
 | Strecke umleiten | Ein Seilstück in der Mitte greifen und auf eine oder mehrere Stationen ziehen – sie werden dazwischen eingefügt |
-| Station abhängen | Ein Seilstück greifen und über eine seiner Endstationen hinweg auf die nächste Station der Linie ziehen – die übersprungene Station wird aus der Linie genommen |
+| Station abhängen | Ein Seilstück greifen und über eine seiner Endstationen hinweg auf die nächste Station der Linie ziehen |
 | Linie auswählen | Auf ein Seilstück oder den Farbpunkt unten tippen |
-| Linie löschen | Linie auswählen, dann **Löschen** (oder `Entf`). Die Gondeln fahren zur nächsten Station, lassen alle aussteigen und kehren ins Depot zurück. |
-| Farbe der nächsten Linie | Freien Farbpunkt unten antippen |
+| Linie löschen | Linie auswählen, dann **Löschen** (oder `Entf`). Die Gondeln lassen an der nächsten Station alle aussteigen und kehren ins Depot zurück. |
 | Gondel einsetzen | Gondel-Symbol aus der unteren Leiste auf eine Linie ziehen |
-| Gondel versetzen / entfernen | Gondel auf dem Netz greifen und auf eine andere Linie ziehen – oder irgendwo ablegen, dann geht sie zurück ins Depot |
+| Gondel versetzen / entfernen | Gondel greifen und auf eine andere Linie ziehen – oder irgendwo ablegen (zurück ins Depot) |
 | Große Kabine / Umsteigestation | Symbol aus der Leiste auf eine Gondel bzw. Station ziehen |
 | Stationsinfo | Mit der Maus über eine Station fahren oder kurz antippen (Name, Höhe, Wartende) |
+| **Karte verschieben** | Rechte (oder mittlere) Maustaste gedrückt halten und ziehen · Touch: mit zwei Fingern ziehen |
+| **Zoomen** | Mausrad bzw. Touchpad · Touch: mit zwei Fingern auseinander-/zusammenziehen |
+| Ansicht zentrieren | Knopf oben rechts (erscheint nach dem Verschieben) oder `C` |
+
+Solange du die Kamera nicht selbst bewegst, folgt sie automatisch der wachsenden Stadt. Nach dem Verschieben oder Zoomen bleibt sie, wo du sie hingestellt hast, bis du die Ansicht zentrierst.
 
 | Taste | Funktion |
 | --- | --- |
 | `Leertaste` | Pause / weiter (Bauen ist auch in der Pause möglich) |
 | `1` / `2` | Spielgeschwindigkeit 1× / 2× – im Belohnungsdialog: Belohnung wählen |
+| `+` / `-` | Hinein- / herauszoomen |
+| `C` / `Pos1` | Ansicht auf die Stadt zentrieren |
 | `Entf` / `Backspace` | Ausgewählte Linie löschen |
 | `M` | Ton an/aus |
-| `Esc` | Ziehen abbrechen, Auswahl aufheben bzw. Menü öffnen |
+| `Esc` | Ziehen abbrechen, Auswahl aufheben, Dialog schließen bzw. Menü öffnen |
+| `Enter` | Im Start- und Game-Over-Bildschirm: Runde starten |
 
-Der Highscore wird lokal im Browser gespeichert (`localStorage`); im privaten Modus funktioniert das Spiel auch ohne.
+## Speichern
+
+- Der vollständige Spielzustand wird gespeichert: Seed, Zeit und Woche, Stationen mit Wartenden und Timern, Linien, Gondeln mitsamt Fahrgästen und Position, Masten, Vorrat, Punktestand, Zufallsgenerator und Kamera. Ein geladener Stand läuft danach exakt so weiter, wie er gespeichert wurde.
+- **Automatisch** alle 30 Sekunden Spielzeit sowie beim Verlassen oder Verstecken der Seite. Im Startbildschirm setzt **Weiterspielen** die letzte Runde fort. Endet eine Runde, wird ihr automatischer Stand gelöscht.
+- **Manuell** über *Menü → Spiel speichern* in einen von drei Speicherplätzen. *Spielstände* (Start- und Menübildschirm) zeigt alle Plätze mit Vorschau (Datum, Woche, Punkte, Startgebiet, Seed) zum Laden oder Löschen. Ein geladener Stand beginnt pausiert.
+- Lokal liegen die Stände in der **IndexedDB** des Browsers. Ist kein Speicher verfügbar (z. B. privater Modus), läuft das Spiel trotzdem – die Stände leben dann nur bis zum Neuladen.
+- Jeder Stand trägt eine Versionsnummer (`SAVE_VERSION` in `src/save.js`). Beim Laden läuft er durch `migrate()` – dort werden künftige Formatänderungen nachgezogen; Stände aus einer neueren Spielversion werden abgelehnt.
+
+## Konten
+
+Nur verfügbar, wenn das Spiel über den mitgelieferten Server läuft. Ohne Anmeldung bleibt alles als **Gast** spielbar (nur lokale Spielstände).
+
+- **Registrieren / Anmelden** im Startbildschirm unter *Anmelden*. Benutzername 3–24 Zeichen (Buchstaben, Ziffern, `_ . -`), Passwort mindestens 8 Zeichen. Der angemeldete Name steht klein in der Ecke.
+- Angemeldet wird jeder Spielstand zusätzlich im **Konto** gespeichert (eigene Konto-Plätze in der Spielstand-Liste) und lässt sich so in einem anderen Browser oder auf einem anderen Gerät laden.
+- Nach der Anmeldung bietet das Spiel an, **lokale Gast-Spielstände ins Konto zu übernehmen**. Belegte Konto-Plätze werden dabei nicht überschrieben, sondern als „Übernommen N“ abgelegt.
+- Am Rundenende wird die Punktzahl eingetragen: **Bestenliste** mit den besten Spielern und deinen persönlichen Bestwerten. Der lokale Highscore im Browser bleibt zusätzlich erhalten.
+- Sicherheit: Passwörter werden mit bcrypt gehasht, die Sitzung läuft über ein `HttpOnly`-Cookie (`SameSite=Lax`, 30 Tage), Eingaben werden geprüft, Anmelden und Registrieren sind pro IP und Benutzer im Takt begrenzt, und ändernde Anfragen von fremden Seiten werden abgelehnt.
+
+### API
+
+| Methode | Pfad | Zweck |
+| --- | --- | --- |
+| `POST` | `/api/auth/register`, `/api/auth/login`, `/api/auth/logout` | Konto anlegen, anmelden, abmelden |
+| `GET` | `/api/auth/me` | Angemeldeter Benutzer |
+| `GET` | `/api/saves` | Liste der Spielstände (nur Vorschau) |
+| `GET` / `PUT` / `DELETE` | `/api/saves/:slot` | Spielstand laden / speichern / löschen |
+| `POST` | `/api/scores` | Punktzahl eintragen |
+| `GET` | `/api/scores/me`, `/api/leaderboard` | Persönliche Bestwerte, globale Bestenliste |
 
 ## Projektstruktur
 
 ```
-index.html          Seitengerüst, HUD, Bildschirme
-style.css           Gestaltung der Oberfläche (responsiv)
+index.html            Seitengerüst, HUD, Bildschirme und Dialoge
+style.css             Gestaltung der Oberfläche (responsiv)
 src/
-  main.js           Einstieg, Spielschleife (requestAnimationFrame, Delta-Time), Verdrahtung, Highscore
-  game.js           Spielzustand und Regeln: Zeit/Wochen, Spawning, Netz-Operationen, Ressourcen, Game Over
-  map.js            Karte: Höhenbänder, Schluchten, Mastbedarf, Bauplätze, Illimani
-  station.js        Stationen, Formen, wartende Fahrgäste, Überfüllungs-Timer
-  line.js           Linien, parallele Versätze, T-Enden, Masten
-  gondola.js        Gondeln: Fahrt mit Beschleunigung, Pendeln am Seil, Ein-/Aus-/Umsteigen
-  passenger.js      Fahrgäste und Routing (Dijkstra über Station×Linie mit Umsteigekosten)
-  render.js         Kamera und Zeichnen eines Frames (Hintergrund wird zwischengespeichert)
-  input.js          Maus- und Touch-Bedienung (Pointer Events)
-  ui.js             DOM-Oberfläche: HUD, Leiste, Belohnungen, Game Over
-  audio.js          Prozedurale Klänge über die Web Audio API
-  autoplay.js       Einfacher Bot für den Startbildschirm und die Balancing-Simulation
-  config.js         Spielkonstanten, Linienfarben, Formen
-  util.js           Mathe-, Geometrie- und Speicher-Helfer
+  main.js             Einstieg, Spielschleife, Verdrahtung, Autosave, Menüs, Konten
+  game.js             Spielzustand und Regeln: Zeit/Wochen, Startgebiet, Spawning, Netz, Ressourcen, Game Over
+  data/terrain.js     Geländedaten: Plateau, Ceja, Flüsse, Bergrücken, Stadtgebiete, Orte, Startgebiete, Wahrzeichen
+  terrain.js          Höhenmodell aus den Geländedaten, Schluchten, Höhenlinien
+  map.js              Karte: Zeichnen, Bauplätze, Ortsnamen, Mastbedarf aus dem Geländeprofil
+  buildings.js        Prozedurale Bebauung, blockierende Gebäude, Prüfung der Seilstrecken
+  station.js          Stationen, Formen, wartende Fahrgäste, Überfüllungs-Timer
+  line.js             Linien, parallele Versätze, T-Enden, Masten
+  gondola.js          Gondeln: Fahrt mit Beschleunigung, Pendeln am Seil, Ein-/Aus-/Umsteigen
+  passenger.js        Fahrgäste und Routing (Dijkstra über Station×Linie mit Umsteigekosten)
+  render.js           Kamera (Folgen, Verschieben, Zoom) und Zeichnen; Hintergrund in Kacheln zwischengespeichert
+  input.js            Maus- und Touch-Bedienung inkl. Pinch-Zoom und Kamerasteuerung
+  ui.js               DOM-Oberfläche: HUD, Leiste, Belohnungen, Spielstände, Konto, Bestenliste
+  save.js             Spielstand serialisieren, laden und migrieren
+  storage.js          Lokale Spielstände in IndexedDB (mit Ersatz im Arbeitsspeicher)
+  persist.js          Speicherplätze lokal und im Konto, Übernahme von Gast-Ständen
+  api.js              Client für die Server-API
+  audio.js            Prozedurale Klänge über die Web Audio API
+  autoplay.js         Einfacher Bot für den Startbildschirm und die Simulation
+  config.js           Spielkonstanten, Linienfarben, Formen
+  util.js             Mathe, Geometrie, Seeds und Zufallsgenerator, Speicher-Helfer
+server/
+  index.js            Startpunkt (npm start), Umgebungsvariablen
+  app.js              Express-App: API, Validierung, Auslieferung des Frontends
+  db.js               SQLite-Schema (Benutzer, Sitzungen, Spielstände, Punkte)
+  session.js          Sitzungs-Token und Cookies
+  ratelimit.js        Einfaches Rate-Limiting
+  config.js           Auswertung von TRUST_PROXY
+tests/                Node-Tests (npm test)
 tools/
-  simulate.mjs      Balancing: lässt den Bot mehrere Runden headless spielen
-  stress.mjs        Stresstest mit zufälligen Netzänderungen und Invarianten-Prüfung
+  simulate.mjs        Balancing: lässt den Bot mehrere Runden headless spielen
+  stress.mjs          Stresstest mit zufälligen Netzänderungen und Invarianten-Prüfung
 ```
 
 Die Spiellogik (`game.js` und abhängige Module) kommt ohne DOM aus und läuft deshalb auch in Node.js:
@@ -99,4 +193,6 @@ In der Browser-Konsole ist der laufende Spielzustand unter `window.__teleferico.
 
 ## Hinweise
 
-Teleférico ist ein eigenständiges Spiel mit eigenem Namen, eigener Grafik und eigenem Code. Das Spielprinzip ist von Liniennetz-Spielen inspiriert; es werden keine Assets, Texte oder Logos von *Mini Metro* oder vom Betreiber des realen Seilbahnnetzes in La Paz verwendet. Stationsnamen sind Namen realer Stadtteile von La Paz und El Alto.
+Teleférico ist ein eigenständiges Spiel mit eigenem Namen, eigener Grafik und eigenem Code. Das Spielprinzip ist von Liniennetz-Spielen inspiriert; es werden keine Assets, Texte oder Logos von *Mini Metro* oder vom Betreiber des realen Seilbahnnetzes in La Paz verwendet. Stations- und Ortsnamen sind Namen realer Stadtteile von La Paz und El Alto.
+
+Die Topografie ist von Hand aus öffentlich bekanntem Kartenwissen nachgebaut und stark vereinfacht. Ein Kartenausschnitt, der dabei als Referenz diente (`reference/la-paz-topo.png`), ist bewusst nicht Teil des Repositorys.

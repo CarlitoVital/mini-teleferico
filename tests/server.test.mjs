@@ -1129,9 +1129,6 @@ serverTest('Statische Dateien: Frontend wird ausgeliefert', async (srv) => {
   );
   assert.equal(css.headers.get('x-content-type-options'), 'nosniff');
 
-  const refDir = path.join(ROOT_DIR, 'reference');
-  const ref = fs.existsSync(refDir) ? fs.readdirSync(refDir).find((f) => !f.startsWith('.')) : null;
-  if (ref) assert.equal((await c.get(`/reference/${encodeURIComponent(ref)}`)).status, 200);
 });
 
 serverTest('Statische Dateien: nichts außerhalb des Frontends', async (srv) => {
@@ -1152,6 +1149,7 @@ serverTest('Statische Dateien: nichts außerhalb des Frontends', async (srv) => 
     '/src/',
     '/src/.hidden',
     '/favicon.ico',
+    '/reference/la-paz-topo.png',
   ];
   for (const url of forbidden) {
     const res = await c.get(url);
