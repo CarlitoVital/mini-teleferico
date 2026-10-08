@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#F4EFE6" />
+    <meta name="description" content="Teleférico – ein minimalistisches Seilbahn-Strategiespiel zwischen El Alto und der Zona Sur." />
+    <title>Teleférico</title>
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23F4EFE6'/%3E%3Cpath d='M2 9 30 5' stroke='%232A2A2E' stroke-width='2'/%3E%3Cpath d='M16 7v5' stroke='%232A2A2E' stroke-width='2'/%3E%3Crect x='8' y='12' width='16' height='13' rx='3.5' fill='%23E03A3E'/%3E%3Crect x='11' y='15' width='10' height='4' rx='1' fill='%23fff'/%3E%3C/svg%3E"
+    />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <canvas id="game" aria-label="Spielfeld: Karte von La Paz und El Alto"></canvas>
+
+    <header id="hud" class="hud" hidden>
+      <div class="hud-left">
+        <div class="pill score" title="Beförderte Fahrgäste">
+          <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><circle cx="12" cy="7.5" r="3.4" /><path d="M5 20.5c.7-4.3 3.5-6.8 7-6.8s6.3 2.5 7 6.8z" /></svg>
+          <span id="score">0</span>
+        </div>
+        <div class="pill clock" title="Tageszeit und Woche">
+          <svg viewBox="0 0 36 36" class="clock-ring" aria-hidden="true">
+            <circle class="track" cx="18" cy="18" r="14" />
+            <circle id="clock-arc" class="arc" cx="18" cy="18" r="14" />
+          </svg>
+          <div class="clock-text"><span id="clock-day">Mo 06:00</span><span id="clock-week">Woche 1</span></div>
+        </div>
+        <span id="rush" class="badge" hidden>Stoßzeit</span>
+      </div>
+      <div class="hud-right">
+        <button id="btn-pause" class="icon-btn" aria-label="Pause (Leertaste)" title="Pause (Leertaste)"></button>
+        <button id="btn-speed" class="icon-btn txt" aria-label="Spielgeschwindigkeit" title="Tempo 1×/2× (Tasten 1 und 2)">1×</button>
+        <button id="btn-sound" class="icon-btn" aria-label="Ton an/aus" title="Ton an/aus (M)"></button>
+        <button id="btn-menu" class="icon-btn" aria-label="Menü" title="Menü (Esc)"></button>
+      </div>
+    </header>
+
+    <footer id="bar" class="bar" hidden>
+      <div class="bar-inner">
+        <div id="line-dots" class="line-dots" aria-label="Linien"></div>
+        <button id="btn-delete" class="delete-btn" hidden title="Ausgewählte Linie löschen (Entf)">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>Löschen
+        </button>
+        <span class="sep" aria-hidden="true"></span>
+        <div id="resources" class="resources">
+          <button class="res" data-kind="gondola" data-label="Gondeln" title="Gondel – auf eine Linie ziehen" aria-label="Gondeln">
+            <span class="count">0</span>
+          </button>
+          <button class="res" data-kind="masts" data-label="Masten" title="Masten – werden beim Bauen automatisch gesetzt" aria-label="Masten">
+            <span class="count">0</span>
+          </button>
+          <button class="res" data-kind="cabin" data-label="großen Kabinen" title="Große Kabine – auf eine Gondel ziehen" aria-label="Große Kabinen">
+            <span class="count">0</span>
+          </button>
+          <button class="res" data-kind="interchange" data-label="Umsteigestationen" title="Umsteigestation – auf eine Station ziehen" aria-label="Umsteigestationen">
+            <span class="count">0</span>
+          </button>
+        </div>
+      </div>
+    </footer>
+
+    <div id="paused" class="paused-banner" hidden>Pausiert<span class="kbd-only"> · Leertaste zum Fortsetzen</span></div>
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+    <section id="screen-start" class="screen start">
+      <div class="panel start-panel">
+        <svg class="logo" viewBox="0 0 120 64" aria-hidden="true">
+          <path d="M4 50 L60 14 L116 34" fill="none" stroke="#E03A3E" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" />
+          <path d="M8 22 L112 58" fill="none" stroke="#F4B400" stroke-width="6" stroke-linecap="round" />
+          <circle cx="60" cy="14" r="7" fill="#fff" stroke="#2A2A2E" stroke-width="3.2" />
+          <rect x="83" y="27" width="11" height="11" rx="1" fill="#fff" stroke="#2A2A2E" stroke-width="3" />
+          <path d="M30 24 V30" stroke="#2A2A2E" stroke-width="1.6" />
+          <rect x="24.5" y="30" width="11" height="9.5" rx="2.4" fill="#E03A3E" />
+          <rect x="26.6" y="32.4" width="6.8" height="3" rx="0.8" fill="#fff" />
+        </svg>
+        <h1>Teleférico</h1>
+        <p class="tagline">Baue das Seilbahnnetz zwischen El Alto, dem Zentrum und der Zona Sur.</p>
+        <button id="btn-play" class="btn primary">Spielen</button>
+        <p id="best" class="best"></p>
+        <ul class="rules">
+          <li>
+            <svg class="r-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 18 19 6" class="ln" /><circle cx="5" cy="18" r="3.2" class="st" /><rect x="16" y="3" width="6" height="6" class="st" /></svg>
+            Ziehe von Station zu Station, um eine Seilbahnlinie zu spannen.
+          </li>
+          <li>
+            <svg class="r-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 9.5 8.5 15.5H1.5z" class="fill" /><path d="m11 12.5h4" class="ar" /><path d="m13.5 10 2.5 2.5-2.5 2.5" class="ar" /><path d="M20 9 23.5 15H16.5z" class="st" /></svg>
+            Fahrgäste wollen zu einer Station mit ihrer Form – notfalls mit Umstieg.
+          </li>
+          <li>
+            <svg class="r-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 6h20" class="ar" /><path d="M9 21 11.3 7h1.4L15 21z" class="fill" /><path d="M7.5 5.2h9v2h-9z" class="fill" /></svg>
+            Lange Spannweiten und Schluchten brauchen Masten. Bergauf sind Gondeln langsamer.
+          </li>
+          <li>
+            <svg class="r-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" class="ring" /><path d="M12 12V3a9 9 0 0 1 8.6 11.7z" class="warn" /><circle cx="12" cy="12" r="3.6" class="st" /></svg>
+            Bleibt eine Station zu lange überfüllt, ist das Spiel vorbei.
+          </li>
+        </ul>
+        <div class="start-foot">
+          <span class="kbd-only">Leertaste Pause · 1/2 Tempo · Entf Linie löschen</span>
+          <button id="start-sound" class="link-btn">Ton: an</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="screen-reward" class="screen modal" hidden>
+      <div class="panel reward-panel" role="dialog" aria-modal="true" aria-labelledby="reward-title">
+        <p class="eyebrow" id="reward-week">Woche 2</p>
+        <h2 id="reward-title">Die Stadt wächst</h2>
+        <p class="sub">Du bekommst eine neue Gondel. Wähle zusätzlich eine Belohnung:</p>
+        <div id="reward-cards" class="cards"></div>
+      </div>
+    </section>
+
+    <section id="screen-over" class="screen modal" hidden>
+      <div class="panel over-panel" role="dialog" aria-modal="true" aria-labelledby="over-title">
+        <p class="eyebrow" id="over-eyebrow">Game Over</p>
+        <h2 id="over-title">Station überfüllt</h2>
+        <div class="big-score"><span id="over-score">0</span><small>Fahrgäste befördert</small></div>
+        <p id="over-record" class="record" hidden>Neuer Rekord!</p>
+        <dl id="over-stats" class="stats"></dl>
+        <div class="actions">
+          <button id="btn-again" class="btn primary">Nochmal spielen</button>
+          <button id="btn-home" class="btn">Hauptmenü</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="screen-menu" class="screen modal" hidden>
+      <div class="panel menu-panel" role="dialog" aria-modal="true" aria-labelledby="menu-title">
+        <h2 id="menu-title">Pause</h2>
+        <div class="actions vertical">
+          <button id="btn-resume" class="btn primary">Weiterspielen</button>
+          <button id="btn-restart" class="btn">Neu starten</button>
+          <button id="btn-quit" class="btn">Hauptmenü</button>
+        </div>
+      </div>
+    </section>
+
+    <div id="boot-error" class="boot-error" hidden>
+      <div class="panel">
+        <h2>Teleférico konnte nicht starten</h2>
+        <p>
+          Dein Browser blockiert JavaScript-Module, wenn die Datei direkt von der Festplatte (<code>file://</code>) geöffnet
+          wird – das betrifft z.&nbsp;B. Chrome, Edge und Safari.
+        </p>
+        <p>Starte stattdessen einen kleinen lokalen Server im Projektordner:</p>
+        <pre>npx serve .</pre>
+        <p>oder</p>
+        <pre>python3 -m http.server 8000</pre>
+        <p>und öffne die angezeigte Adresse (z.&nbsp;B. <code>http://localhost:3000</code>).</p>
+      </div>
+    </div>
+
+    <script>
+      // Fallback-Hinweis, falls das Modul nicht lädt (z. B. file:// in Chrome).
+      window.__tfShowBootError = function () {
+        if (window.__tfBooted) return;
+        var el = document.getElementById('boot-error');
+        if (el) el.hidden = false;
+      };
+      setTimeout(window.__tfShowBootError, 3000);
+    </script>
+    <script type="module" src="src/main.js" onerror="window.__tfShowBootError()"></script>
+    <script nomodule>
+      window.__tfShowBootError();
+    </script>
+  </body>
+</html>
