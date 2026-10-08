@@ -138,9 +138,38 @@ export class Game {
     return this.regionRect(this.growth());
   }
 
-  /** Kamerabereich: wie region(), aber in kleinen Stufen (ruhige Kamera, Hintergrund-Cache). */
+  /**
+   * Kamerabereich: wie region(), aber in kleinen Stufen (ruhige Kamera, Hintergrund-Cache) und
+   * so erweitert, dass alle Stationen sichtbar sind.
+   */
   viewRegion() {
-    return this.regionRect(Math.ceil(this.growth() / 0.05 - 1e-9) * 0.05);
+    const r = this.regionRect(Math.ceil(this.growth() / 0.05 - 1e-9) * 0.05);
+    if (!this.stations.length) return r;
+    const pad = 45;
+    let x0 = r.x;
+    let y0 = r.y;
+    let x1 = r.x + r.w;
+    let y1 = r.y + r.h;
+    for (const s of this.stations) {
+      x0 = Math.min(x0, s.x - pad);
+      y0 = Math.min(y0, s.y - pad);
+      x1 = Math.max(x1, s.x + pad);
+      y1 = Math.max(y1, s.y + pad);
+    }
+    if (x0 === r.x && y0 === r.y && x1 === r.x + r.w && y1 === r.y + r.h) return r;
+    // Seitenverhältnis beibehalten
+    let w = x1 - x0;
+    let h = y1 - y0;
+    if (w / h < this.aspect) {
+      const nw = h * this.aspect;
+      x0 -= (nw - w) / 2;
+      w = nw;
+    } else {
+      const nh = w / this.aspect;
+      y0 -= (nh - h) / 2;
+      h = nh;
+    }
+    return { x: x0, y: y0, w, h, g: r.g };
   }
 
   regionRect(g) {
@@ -179,7 +208,7 @@ export class Game {
     const c = this.startArea;
     for (const shape of shapes) {
       let spot = null;
-      for (const r of [260, 340, 440, 600, 900]) {
+      for (const r of [160, 210, 260, 340, 440, 600, 900]) {
         const box = { x: c.x - r, y: c.y - r, w: 2 * r, h: 2 * r };
         spot = this.map.findSpot(rng, this.stations, [], box, () => 1, {
           minDist: 110,

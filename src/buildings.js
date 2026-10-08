@@ -343,8 +343,8 @@ export class Buildings {
       }
     }
     this.fillRects(ctx, paths.field, 'rgba(118,138,92,0.12)');
-    this.fillRects(ctx, paths.house, 'rgba(96,84,70,0.105)');
-    this.fillRects(ctx, paths.market, 'rgba(96,84,70,0.2)');
+    this.fillRects(ctx, paths.house, 'rgba(96,84,70,0.09)');
+    this.fillRects(ctx, paths.market, 'rgba(96,84,70,0.17)');
   }
 
   fillRects(ctx, list, color) {
