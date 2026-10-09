@@ -481,6 +481,23 @@ export class Terrain {
     return false;
   }
 
+  /**
+   * Zu nah an einem Wasserlauf für eine Station mit Radius r? Benannte Flüsse brauchen je nach
+   * Schluchttiefe mehr Abstand, Seitenquebradas nur wenig. Geprüft wird jeder Wasserlauf, nicht nur
+   * der nächste – sonst verdeckt eine nahe Quebrada eine tiefe Schlucht dahinter.
+   */
+  nearWater(x, y, r) {
+    for (const rv of this.rivers) {
+      const p = rv.pts;
+      for (let i = 0; i < p.length - 1; i++) {
+        const q = pointSegDist(x, y, p[i].x, p[i].y, p[i + 1].x, p[i + 1].y);
+        const clear = rv.minor ? r + 4 : r + 14 + lerp(p[i].gorge, p[i + 1].gorge, q.t) * 0.15;
+        if (q.d < clear) return true;
+      }
+    }
+    return false;
+  }
+
   /** Abstand zum nächsten Wasserlauf und dessen Schluchttiefe. */
   riverInfo(x, y) {
     let best = { d: Infinity, gorge: 0, river: null };

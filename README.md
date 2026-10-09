@@ -23,6 +23,7 @@ Der Server liefert das Spiel aus und stellt die API unter `/api` bereit. Die Dat
 | `TELEFERICO_DB` | Pfad zur SQLite-Datenbank |
 | `COOKIE_SECURE=1` | Sitzungs-Cookie nur über HTTPS senden (für den Betrieb hinter HTTPS) |
 | `TRUST_PROXY` | Hinter einem Reverse-Proxy: `1` (ein Proxy), eine Anzahl oder IP-/CIDR-Liste – damit das Rate-Limit die echte Client-IP sieht |
+| `PUBLIC_ORIGIN` | Öffentliche Adresse, z. B. `https://teleferico.example` (mehrere kommagetrennt). Nötig, wenn der Proxy den `Host`-Header umschreibt – sonst lehnt der Schutz vor fremden Seiten Anmelden und Speichern ab. Alternativ im Proxy den Host weiterreichen (nginx: `proxy_set_header Host $host;`). |
 
 Tests (Server-API, Spielstände, Frontend-Erkennung): `npm test`
 
@@ -71,7 +72,7 @@ Die Bebauung wird aus dem Seed erzeugt und folgt den Stadtgebieten (Schachbrett 
 - **Überbaubar** (hellgrau): Wohnhäuser, Märkte, Plätze, Felder. Seile dürfen darüber hinweg.
 - **Blockierend** (dunkel, mit Symbol): Hochhäuser im Zentrum und in der Zona Sur, Stadien, Spitäler mit Hubschrauberlandeplatz, Kasernen sowie der **Flughafen El Alto samt Anflugschneise**.
 
-Beim Ziehen prüft das Spiel jede Seilstrecke sofort: Ungültige Strecken werden rot gestrichelt, lassen sich nicht bauen, und ein kurzer Hinweis nennt den Grund (z. B. „Flughafen-Sperrzone: kein Seil über Flughafen und Einflugschneise.“, „Hier braucht das Seil 1 hohen Mast über Gebäude – frei: 0.“ oder „Zu wenig Masten: …“). Mit der Belohnung **Hoher Mast** darf ein Seil ein *einzelnes* Hochhaus, Stadion, Spital oder eine Kaserne überspannen – der Flughafen bleibt tabu. Masten werden automatisch neben blockierende Gebäude gesetzt. Fährst du mit der Maus über ein Gebäude (Touch: kurz antippen), zeigt ein Tooltip, was es ist.
+Beim Ziehen prüft das Spiel jede Seilstrecke sofort: Ungültige Strecken werden rot gestrichelt, lassen sich nicht bauen, und ein kurzer Hinweis nennt den Grund (z. B. „Flughafen-Sperrzone: kein Seil über Flughafen und Einflugschneise.“, „Hier braucht das Seil 1 hohen Mast über Gebäude – frei: 0.“ oder „Zu wenig Masten: …“). Mit der Belohnung **Hoher Mast** darf ein Seil ein *einzelnes* Hochhaus, Stadion, Spital oder eine Kaserne überspannen – der Flughafen bleibt tabu. Hohe Masten erscheinen größer und mit rot-weißer Spitze; normale Masten werden automatisch neben blockierende Gebäude gesetzt. Fährst du mit der Maus über ein Gebäude (Touch: kurz antippen), zeigt ein Tooltip, was es ist.
 
 ### Seeds und Startgebiete
 
@@ -116,9 +117,9 @@ Solange du die Kamera nicht selbst bewegst, folgt sie automatisch der wachsenden
 ## Speichern
 
 - Der vollständige Spielzustand wird gespeichert: Seed, Zeit und Woche, Stationen mit Wartenden und Timern, Linien, Gondeln mitsamt Fahrgästen und Position, Masten, Vorrat, Punktestand, Zufallsgenerator und Kamera. Ein geladener Stand läuft danach exakt so weiter, wie er gespeichert wurde.
-- **Automatisch** alle 30 Sekunden Spielzeit sowie beim Verlassen oder Verstecken der Seite. Im Startbildschirm setzt **Weiterspielen** die letzte Runde fort. Endet eine Runde, wird ihr automatischer Stand gelöscht.
+- **Automatisch** alle 30 Sekunden Spielzeit sowie beim Verlassen oder Verstecken der Seite. Im Startbildschirm setzt **Weiterspielen** die letzte Runde fort. Endet eine Runde, wird ihr automatischer Stand gelöscht bzw. im Konto als beendet markiert – so bietet sie auch kein anderes Gerät mehr an. Ein nur geladener, unveränderter Stand überschreibt den automatischen Stand nicht.
 - **Manuell** über *Menü → Spiel speichern* in einen von drei Speicherplätzen. *Spielstände* (Start- und Menübildschirm) zeigt alle Plätze mit Vorschau (Datum, Woche, Punkte, Startgebiet, Seed) zum Laden oder Löschen. Ein geladener Stand beginnt pausiert.
-- Lokal liegen die Stände in der **IndexedDB** des Browsers. Ist kein Speicher verfügbar (z. B. privater Modus), läuft das Spiel trotzdem – die Stände leben dann nur bis zum Neuladen.
+- Lokal liegen die Stände in der **IndexedDB** des Browsers – getrennt nach Gast und Konto, sodass nach dem Abmelden oder auf einem geteilten Rechner niemand die Stände eines anderen Kontos sieht. Ist kein Speicher verfügbar (z. B. privater Modus), läuft das Spiel trotzdem – die Stände leben dann nur bis zum Neuladen.
 - Jeder Stand trägt eine Versionsnummer (`SAVE_VERSION` in `src/save.js`). Beim Laden läuft er durch `migrate()` – dort werden künftige Formatänderungen nachgezogen; Stände aus einer neueren Spielversion werden abgelehnt.
 
 ## Konten
@@ -128,8 +129,9 @@ Nur verfügbar, wenn das Spiel über den mitgelieferten Server läuft. Ohne Anme
 - **Registrieren / Anmelden** im Startbildschirm unter *Anmelden*. Benutzername 3–24 Zeichen (Buchstaben, Ziffern, `_ . -`), Passwort mindestens 8 Zeichen. Der angemeldete Name steht klein in der Ecke.
 - Angemeldet wird jeder Spielstand zusätzlich im **Konto** gespeichert (eigene Konto-Plätze in der Spielstand-Liste) und lässt sich so in einem anderen Browser oder auf einem anderen Gerät laden.
 - Nach der Anmeldung bietet das Spiel an, **lokale Gast-Spielstände ins Konto zu übernehmen**. Belegte Konto-Plätze werden dabei nicht überschrieben, sondern als „Übernommen N“ abgelegt.
-- Am Rundenende wird die Punktzahl eingetragen: **Bestenliste** mit den besten Spielern und deinen persönlichen Bestwerten. Der lokale Highscore im Browser bleibt zusätzlich erhalten.
-- Sicherheit: Passwörter werden mit bcrypt gehasht, die Sitzung läuft über ein `HttpOnly`-Cookie (`SameSite=Lax`, 30 Tage), Eingaben werden geprüft, Anmelden und Registrieren sind pro IP und Benutzer im Takt begrenzt, und ändernde Anfragen von fremden Seiten werden abgelehnt.
+- Am Rundenende wird die Punktzahl eingetragen: **Bestenliste** mit den besten Spielern und deinen persönlichen Bestwerten. Der lokale Highscore im Browser bleibt zusätzlich erhalten. Der Server prüft Ergebnisse auf Plausibilität (bekanntes Startgebiet, gültiger Seed, Woche passend zur Spielzeit, nicht mehr Fahrgäste, als in dieser Zeit entstehen können); nachspielen kann er eine Runde aber nicht.
+- Läuft die Anmeldung ab (oder wurde in einem anderen Tab abgemeldet), meldet das Spiel das und speichert bis zur erneuten Anmeldung nur lokal.
+- Sicherheit: Passwörter werden mit bcrypt gehasht, die Sitzung läuft über ein `HttpOnly`-Cookie (`SameSite=Lax`, 30 Tage), Eingaben werden geprüft, Fehlversuche beim Anmelden sind pro IP und Benutzer begrenzt (erfolgreiche Anmeldungen zählen nicht, damit sich z. B. eine Schulklasse hinter einer Adresse nicht aussperrt), neue Konten pro IP und Stunde ebenso. Ändernde Anfragen von fremden Seiten werden abgelehnt. Ein Spielstand darf höchstens 256 KB groß sein, alle Stände eines Kontos zusammen 2 MB (echte Stände: 10–60 KB).
 
 ### API
 
@@ -175,7 +177,8 @@ server/
   db.js               SQLite-Schema (Benutzer, Sitzungen, Spielstände, Punkte)
   session.js          Sitzungs-Token und Cookies
   ratelimit.js        Einfaches Rate-Limiting
-  config.js           Auswertung von TRUST_PROXY
+  config.js           Auswertung von TRUST_PROXY und PUBLIC_ORIGIN
+  plausible.js        Plausibilitätsprüfung für Bestenlisten-Einträge
 tests/                Node-Tests (npm test)
 tools/
   simulate.mjs        Balancing: lässt den Bot mehrere Runden headless spielen

@@ -28,6 +28,7 @@ let runId = null;
 let autosaveAcc = 0;
 let lastSaved = { time: -1, dirty: true };
 let continueEntry = null;
+let loadSeq = 0; // verwirft Ladevorgänge, die von einer neueren Aktion überholt wurden
 
 const ui = new UI({
   onPlay: (seed) => startGame(seed),
@@ -101,7 +102,8 @@ function resetView() {
 
 /** Startbildschirm mit selbst spielendem Netz im Hintergrund. */
 function showHome() {
-  if (game && !game.demo && game.state !== 'over') autosave(true);
+  loadSeq++;
+  autosave();
   resetView();
   game = newGame(true);
   game.res = { ...game.res, lines: 5, gondolas: 9, masts: 24 };
@@ -118,7 +120,8 @@ function showHome() {
 }
 
 function startGame(seed) {
-  if (game && !game.demo && game.state !== 'over') autosave(true);
+  loadSeq++;
+  autosave();
   audio.unlock();
   audio.click();
   resetView();
@@ -136,6 +139,7 @@ function startGame(seed) {
 function showReward(g, week, options) {
   ui.showReward(g, week, options, (k) => {
     g.chooseReward(k);
+    lastSaved.dirty = true;
     audio.click();
     if (g.hint) g.hint.reward(k);
   });
@@ -199,8 +203,7 @@ function onGameOver(g, sum) {
   const best = loadBest();
   const record = sum.score > 0 && (!best || sum.score > best.score);
   if (record) storageSet('teleferico.best', JSON.stringify({ score: sum.score, week: sum.week }));
-  const finishedRun = runId;
-  persist.dropAuto(finishedRun);
+  persist.finishRun(runId).then(refreshContinue);
   const st = g.overStation;
   // Station oberhalb des Game-Over-Panels zeigen
   const cam = renderer.camera;
@@ -224,20 +227,27 @@ function cameraState() {
   return { x: c.x, y: c.y, scale: c.scale, manual: c.manual };
 }
 
+/** Gibt es seit dem letzten Speichern/Laden Änderungen? (Ein nur geladener Stand überschreibt „auto“ nicht.) */
+function unsaved() {
+  return !!game && !game.demo && game.state !== 'over' && (game.time !== lastSaved.time || lastSaved.dirty);
+}
+
 /** Automatisch speichern (alle 30 s, beim Verlassen und beim Wechsel ins Hauptmenü). */
-async function autosave(force = false) {
-  if (!game || game.demo || game.state === 'over') return;
-  if (!force && game.time === lastSaved.time && !lastSaved.dirty) return;
+async function autosave() {
+  if (!unsaved()) return;
   lastSaved = { time: game.time, dirty: false };
   const r = await persist.save('auto', game, cameraState(), runId);
   if (r.server === false && !autosave.warned) {
     autosave.warned = true;
-    ui.toast(`Konto-Speicherung fehlgeschlagen (${r.error}) – lokal gesichert.`);
+    if (persist.online) ui.toast(`Konto-Speicherung fehlgeschlagen (${r.error}) – lokal gesichert.`);
+  } else if (r.server) {
+    autosave.warned = false;
   }
 }
 
 function saveOnExit() {
-  if (!game || game.demo || game.state === 'over') return;
+  if (!unsaved()) return;
+  lastSaved = { time: game.time, dirty: false };
   persist.saveOnExit(game, cameraState(), runId);
 }
 
@@ -251,16 +261,16 @@ async function refreshContinue() {
 }
 
 async function openSaves(mode) {
-  let entries = await persist.entries();
+  const { entries, error } = mode === 'save' ? await persist.saveSlots() : await persist.list();
   let note = '';
   if (mode === 'save') {
-    entries = entries.filter((e) => e.kind === 'slot' && e.source === 'local');
     note = persist.online
       ? 'Gespeichert wird lokal und zusätzlich in deinem Konto.'
       : 'Gespeichert wird lokal in diesem Browser. Mit einem Konto auch auf dem Server.';
   } else {
     note = persist.online ? '' : api.available ? 'Melde dich an, um Spielstände auf allen Geräten zu laden.' : '';
   }
+  if (error) note = `Spielstände im Konto konnten nicht geladen werden (${error}).`;
   if (!(await localSaves.available())) {
     note = 'Dieser Browser erlaubt keinen dauerhaften Speicher – Spielstände gehen beim Neuladen verloren.';
   }
@@ -279,10 +289,14 @@ async function saveToSlot(entry) {
 }
 
 async function loadEntry(entry) {
+  const seq = ++loadSeq;
   try {
     const data = await persist.loadData(entry);
+    if (seq !== loadSeq) return; // inzwischen wurde etwas anderes gestartet oder geladen
     const { game: g, camera } = deserializeGame(data);
-    applyLoaded(g, camera, entry.meta && entry.meta.runId);
+    // Nur „Weiterspielen“ setzt dieselbe Runde fort; ein Speicherplatz startet einen neuen Zweig,
+    // damit dessen Autosaves nicht als Teil einer womöglich schon beendeten Runde gelten
+    applyLoaded(g, camera, entry.kind === 'auto' ? entry.meta && entry.meta.runId : null);
     audio.click();
     ui.toast(`Spielstand geladen – Woche ${g.week}, ${g.score} Fahrgäste. Leertaste zum Fortsetzen.`, 4000);
   } catch (err) {
@@ -316,7 +330,7 @@ function applyLoaded(g, camera, rid) {
 }
 
 async function deleteEntry(entry) {
-  const where = entry.source === 'server' ? 'im Konto' : 'auf diesem Gerät';
+  const where = { server: 'im Konto', both: 'auf diesem Gerät und im Konto' }[entry.source] || 'auf diesem Gerät';
   if (!window.confirm(`„${entry.label}“ ${where} wirklich löschen?`)) return;
   try {
     await persist.remove(entry);
@@ -341,6 +355,13 @@ async function importLocal() {
 // ---------------------------------------------------------------- Konto
 /** Der eigene Server markiert die ausgelieferte Seite; bei statischem Hosting gibt es keine API. */
 const hasBackend = () => !!document.querySelector('meta[name="teleferico-server"]');
+
+// Sitzung auf dem Server abgelaufen oder in einem anderen Tab abgemeldet
+persist.onSessionLost = () => {
+  ui.setUser(null, api.available);
+  ui.toast('Deine Anmeldung ist abgelaufen – bitte erneut anmelden. Bis dahin wird nur lokal gespeichert.', 6000);
+  refreshContinue();
+};
 
 async function initAccount() {
   if (hasBackend() && (await api.probe())) {

@@ -25,7 +25,7 @@ export class Input {
     window.addEventListener('pointerup', (e) => this.onUp(e));
     window.addEventListener('pointercancel', (e) => {
       this.touches.delete(e.pointerId);
-      if (this.pinch && this.touches.size < 2) this.pinch = null;
+      if (this.pinch) this.touchesChanged();
       if (this.pan && this.pan.id === e.pointerId) this.pan = null;
       if (e.pointerId === this.pointerId) this.cancel();
     });
@@ -151,15 +151,28 @@ export class Input {
     e.preventDefault();
     const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1;
     const dy = clamp(e.deltaY * unit, -240, 240);
+    // Rein seitliches Scrollen (Wischen zur Seite, Shift+Rad) zoomt nicht und lässt die Kamera folgen
+    if (Math.abs(dy) < 0.5) return;
     this.cam.zoomAt(e.clientX, e.clientY, Math.exp(-dy * (e.ctrlKey ? 0.006 : 0.0016)));
   }
 
   /** Zwei Finger: Pinch-Zoom und Schwenken. */
   startPinch() {
-    const [a, b] = [...this.touches.values()];
     // ein begonnenes Linienziehen o. Ä. verwerfen
     if (this.view.drag) this.cancel();
+    this.basePinch();
+  }
+
+  /** Bezugswerte aus den ersten beiden Fingern (nach jedem Wechsel der Finger neu). */
+  basePinch() {
+    const [a, b] = [...this.touches.values()];
     this.pinch = { d: Math.hypot(a.x - b.x, a.y - b.y) || 1, mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2 };
+  }
+
+  /** Ein Finger kam weg: mit weniger als zwei endet der Pinch, sonst neu ansetzen statt zu springen. */
+  touchesChanged() {
+    if (this.touches.size < 2) this.pinch = null;
+    else this.basePinch();
   }
 
   movePinch() {
@@ -260,7 +273,7 @@ export class Input {
     if (e.pointerType === 'touch') {
       this.touches.delete(e.pointerId);
       if (this.pinch) {
-        if (this.touches.size < 2) this.pinch = null;
+        this.touchesChanged();
         return;
       }
     }
@@ -425,7 +438,10 @@ export class Input {
     const g = this.game;
     if (v.reason === 'blocked') return v.plan.reason;
     if (v.reason === 'tall') {
-      return `Hier braucht das Seil ${v.tall} ${v.tall === 1 ? 'hohen Mast' : 'hohe Masten'} über Gebäude – frei: ${v.tallFree}.`;
+      // nur diese Strecke zählen, nicht die ganze Linie
+      const need = a && b ? g.map.mastPlan(a, b).tall : v.tall;
+      const free = Math.max(0, v.tallFree - (v.tall - need));
+      return `Hier braucht das Seil ${need} ${need === 1 ? 'hohen Mast' : 'hohe Masten'} über Gebäude – frei: ${free}.`;
     }
     if (v.reason === 'masts' && a && b) {
       const need = g.map.mastPlan(a, b).count;
@@ -442,7 +458,9 @@ export class Input {
     const free = g.mastsFree + (drag.line ? drag.line.mastCount : 0) - g.mastsFor(list);
     const tallFree = g.tallMastsFree + (drag.line ? drag.line.tallCount : 0) - g.tallFor(list);
     if (plan.blocked) return plan.reason;
-    if (plan.tall > tallFree) return `Braucht ${plan.tall} hohen Mast über Gebäude – frei: ${Math.max(0, tallFree)}`;
+    if (plan.tall > tallFree) {
+      return `Braucht ${plan.tall} ${plan.tall === 1 ? 'hohen Mast' : 'hohe Masten'} über Gebäude – frei: ${Math.max(0, tallFree)}`;
+    }
     if (plan.count > free) return `Braucht ${plan.count} ${plan.count === 1 ? 'Mast' : 'Masten'} – frei: ${Math.max(0, free)}`;
     return null;
   }

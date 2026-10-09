@@ -314,7 +314,12 @@ export class UI {
           ? `<span class="save-main">Woche ${esc(m.week)} · ${esc(m.score)} Fahrgäste · ${esc(m.area)}</span>
              <span class="save-sub">${esc(formatDate(m.savedAt))} · Seed ${esc(m.seed)}</span>`
           : '<span class="save-main empty">leer</span>';
-        const src = e.source === 'server' ? '<span class="tag server">Konto</span>' : '<span class="tag">Lokal</span>';
+        const src =
+          e.source === 'server'
+            ? '<span class="tag server">Konto</span>'
+            : e.source === 'both'
+              ? '<span class="tag server">Lokal + Konto</span>'
+              : '<span class="tag">Lokal</span>';
         const actions = [];
         if (mode === 'save' && e.kind === 'slot') actions.push(`<button class="btn small primary" data-action="save" data-index="${i}">${m ? 'Überschreiben' : 'Speichern'}</button>`);
         if (mode === 'load' && m) actions.push(`<button class="btn small primary" data-action="load" data-index="${i}">Laden</button>`);

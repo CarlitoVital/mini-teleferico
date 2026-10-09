@@ -27,32 +27,41 @@ export class RateLimiter {
     return stamps;
   }
 
-  /** Tabelle voll, auch nach Entfernen abgelaufener Einträge? */
-  #full(t) {
-    if (this.hits.size < this.maxKeys) return false;
+  /**
+   * Platz für einen neuen Schlüssel? Bei voller Tabelle werden zuerst abgelaufene Einträge
+   * entfernt, dann der am längsten unbenutzte Zähler, der sein Limit noch nicht erreicht hat.
+   * Gesperrte Zähler werden nie verdrängt (sonst ließe sich eine Sperre per Flut aufheben);
+   * sind alle Einträge gesperrt, gilt auch der neue Schlüssel als gesperrt.
+   */
+  #room(t, evict) {
+    if (this.hits.size < this.maxKeys) return true;
     this.prune(t);
-    return this.hits.size >= this.maxKeys;
+    if (this.hits.size < this.maxKeys) return true;
+    for (const [k, stamps] of this.hits) {
+      if (stamps.length < this.limit) {
+        if (evict) this.hits.delete(k);
+        return true;
+      }
+    }
+    return false;
   }
 
-  /**
-   * true, wenn das Limit für diesen Schlüssel erreicht ist. Ist die Tabelle mit laufenden
-   * Einträgen voll, gelten neue Schlüssel als gesperrt – laufende Zähler werden nie verdrängt.
-   */
+  /** true, wenn das Limit für diesen Schlüssel erreicht ist. */
   blocked(key) {
     const t = this.now();
     const stamps = this.#live(key, t);
     if (stamps) return stamps.length >= this.limit;
-    return this.#full(t);
+    return !this.#room(t, false);
   }
 
-  /** Zählt einen Versuch (bei voller Tabelle wird ein neuer Schlüssel nicht erfasst). */
+  /** Zählt einen Versuch (ist die Tabelle voll gesperrter Zähler, wird ein neuer Schlüssel nicht erfasst). */
   hit(key) {
     const t = this.now();
     let stamps = this.#live(key, t);
     if (stamps) {
       this.hits.delete(key); // ans Ende der Reihenfolge
     } else {
-      if (this.#full(t)) return;
+      if (!this.#room(t, true)) return;
       stamps = [];
     }
     stamps.push(t);
@@ -64,6 +73,14 @@ export class RateLimiter {
     this.hits.delete(key);
   }
 
+  /** Nimmt den letzten Versuch zurück (z. B. weil er erfolgreich war). */
+  undo(key) {
+    const stamps = this.hits.get(key);
+    if (!stamps) return;
+    stamps.pop();
+    if (stamps.length === 0) this.hits.delete(key);
+  }
+
   /** Sekunden, bis wieder ein Versuch möglich ist (für Retry-After). */
   retryAfter(key) {
     const t = this.now();
@@ -71,7 +88,7 @@ export class RateLimiter {
     let until = t;
     if (stamps) {
       if (stamps.length >= this.limit) until = stamps[stamps.length - this.limit] + this.windowMs;
-    } else if (this.#full(t)) {
+    } else if (!this.#room(t, false)) {
       const first = this.hits.values().next().value;
       until = first[first.length - 1] + this.windowMs;
     }

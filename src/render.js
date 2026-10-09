@@ -3,7 +3,7 @@ import { CONFIG, INK } from './config.js';
 import { TAU, clamp, rgba, roundRectPath } from './util.js';
 import { nightness } from './game.js';
 import { drawStation, drawWaiting, drawOvercrowd, tracePath } from './station.js';
-import { drawLine, drawHandles, drawLineMasts, drawMast, strokeLineStyle, tracePolyline } from './line.js';
+import { drawLine, drawHandles, drawLineMasts, drawPlanSupports, strokeLineStyle, tracePolyline } from './line.js';
 import { CABIN } from './gondola.js';
 import { KIND_NAMES } from './buildings.js';
 
@@ -202,7 +202,6 @@ class TileLayer {
         tile = this.renderTile(L, tx, ty);
         rendered++;
         this.tiles.set(key, tile);
-        if (this.tiles.size > MAX_TILES) this.tiles.delete(this.tiles.keys().next().value);
       }
       const p0 = dev(tx * u, ty * u);
       const p1 = dev((tx + 1) * u, (ty + 1) * u);
@@ -217,6 +216,10 @@ class TileLayer {
         ctx.drawImage(ov, tx * u * k, ty * u * k, sw * k, sh * k, p0.x, p0.y, ((p1.x - p0.x) * sw) / u, ((p1.y - p0.y) * sh) / u);
       }
     }
+    // Erst nach dem Frame aufräumen und nie eine gerade sichtbare Kachel verdrängen (die stehen
+    // in der LRU-Reihenfolge hinten) – auf sehr großen Bildschirmen wächst der Cache entsprechend mit
+    const limit = Math.max(MAX_TILES, order.length + 8);
+    while (this.tiles.size > limit) this.tiles.delete(this.tiles.keys().next().value);
     return complete;
   }
 }
@@ -513,7 +516,8 @@ export class Renderer {
 
   drawPlanMasts(game, a, b, invalid, alpha) {
     const plan = game.map.mastPlan(a, b);
-    for (const t of plan.ts) drawMast(this.ctx, a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t, { invalid, alpha });
+    // gesperrte Strecke: keine hohen Masten andeuten
+    drawPlanSupports(this.ctx, plan.blocked ? { ...plan, tallTs: [] } : plan, a.x, a.y, b.x, b.y, { invalid, alpha });
   }
 
   drawNewStationLabels(game) {

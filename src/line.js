@@ -142,6 +142,8 @@ export function drawMast(ctx, x, y, opts = {}) {
   ctx.save();
   ctx.translate(x, y);
   ctx.globalAlpha *= opts.alpha ?? 1;
+  // Hoher Mast (über einem Gebäude): größer, mit rot-weißer Spitze wie eine Flughindernis-Markierung
+  if (opts.tall) ctx.scale(1.3, 1.55);
   ctx.fillStyle = 'rgba(40,30,20,0.10)';
   ctx.beginPath();
   ctx.ellipse(0, 17, 8, 2.3, 0, 0, TAU);
@@ -166,16 +168,30 @@ export function drawMast(ctx, x, y, opts = {}) {
   ctx.stroke();
   ctx.fillStyle = c;
   ctx.fillRect(-6.5, -1.8, 13, 2.8);
+  if (opts.tall) {
+    ctx.fillStyle = '#E03A3E';
+    ctx.fillRect(-2.6, 1, 5.2, 2.2);
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(-3, 3.2, 6, 1.6);
+    ctx.fillStyle = '#E03A3E';
+    ctx.fillRect(-3.4, 4.8, 6.8, 1.8);
+  }
   ctx.restore();
+}
+
+/** Masten einer Strecke (normale und hohe) entlang a→b zeichnen. */
+export function drawPlanSupports(ctx, plan, ax, ay, bx, by, opts = {}) {
+  for (const t of plan.ts) drawMast(ctx, ax + (bx - ax) * t, ay + (by - ay) * t, opts);
+  for (const t of plan.tallTs) drawMast(ctx, ax + (bx - ax) * t, ay + (by - ay) * t, { ...opts, tall: true });
 }
 
 export function drawLineMasts(ctx, game, line, alpha = 1) {
   const st = line.stations;
   for (let i = 0; i < st.length - 1; i++) {
     const plan = line.segPlans[i];
-    if (!plan || !plan.count) continue;
+    if (!plan || (!plan.count && !plan.tall)) continue;
     const s = offsetSegment(st[i], st[i + 1], game.segOffset(line, st[i], st[i + 1]));
-    for (const t of plan.ts) drawMast(ctx, s.ax + (s.bx - s.ax) * t, s.ay + (s.by - s.ay) * t, { alpha });
+    drawPlanSupports(ctx, plan, s.ax, s.ay, s.bx, s.by, { alpha });
   }
 }
 

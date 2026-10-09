@@ -206,6 +206,14 @@ export class Game {
   spawnInitialStations(rng) {
     const shapes = shuffle(rng, COMMON_SHAPES);
     const c = this.startArea;
+    // Jede Startstation muss sich mit der Startausstattung an eine schon gesetzte anschließen lassen:
+    // ohne hohen Mast, ohne Sperrzone und mit höchstens der Hälfte der Start-Masten
+    const linkable = (x, y) =>
+      this.stations.length === 0 ||
+      this.stations.some((st) => {
+        const plan = this.map.computeMastPlan(st, { x, y });
+        return !plan.blocked && plan.tall === 0 && plan.count <= CONFIG.start.masts / 2;
+      });
     for (const shape of shapes) {
       let spot = null;
       for (const r of [160, 210, 260, 340, 440, 600, 900]) {
@@ -215,6 +223,7 @@ export class Game {
           maxNear: 260,
           tries: 220,
           circle: { x: c.x, y: c.y, r },
+          accept: linkable,
         });
         if (spot) break;
       }

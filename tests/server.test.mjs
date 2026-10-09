@@ -9,7 +9,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
 import { createApp } from '../server/app.js';
-import { parseTrustProxy } from '../server/config.js';
+import { parsePublicOrigins, parseTrustProxy } from '../server/config.js';
 import { MIGRATIONS } from '../server/db.js';
 import { RateLimiter, ipKey } from '../server/ratelimit.js';
 
@@ -479,12 +479,19 @@ serverTest('Spielstände: Validierung von Slot, meta und data', async (srv) => {
   assert.equal(metaBig.status, 400);
   assert.equal(typeof metaBig.json.error, 'string');
 
-  // Gesamtgröße über 2 MB → 413
-  const huge = await c.put('/api/saves/huge', { meta: {}, data: { blob: 'x'.repeat(2.1 * 1024 * 1024) } });
+  // Anfrage über 512 KB → 413
+  const huge = await c.put('/api/saves/huge', { meta: {}, data: { blob: 'x'.repeat(520 * 1024) } });
   assert.equal(huge.status, 413);
   assert.equal(typeof huge.json.error, 'string');
-  // knapp unter 2 MB geht
-  const big = await c.put('/api/saves/big', { meta: {}, data: { blob: 'x'.repeat(1.9 * 1024 * 1024) } });
+  // gespeicherter Stand über 256 KB → 413, auch wenn die Anfrage klein ist (9e20 wird beim Serialisieren 21 Zeichen lang)
+  const inflated = await c.request('PUT', '/api/saves/inflated', {
+    raw: `{"meta":{},"data":{"a":[${Array(30_000).fill('9e20').join(',')}]}}`,
+    headers: { 'content-type': 'application/json' },
+  });
+  assert.equal(inflated.status, 413);
+  assert.equal(typeof inflated.json.error, 'string');
+  // knapp unter 256 KB geht
+  const big = await c.put('/api/saves/big', { meta: {}, data: { blob: 'x'.repeat(250 * 1024) } });
   assert.equal(big.status, 200);
 
   const malformed = await c.request('PUT', '/api/saves/test', {
@@ -494,7 +501,7 @@ serverTest('Spielstände: Validierung von Slot, meta und data', async (srv) => {
   assert.equal(malformed.status, 400);
   assert.equal(typeof malformed.json.error, 'string');
 
-  assert.equal(srv.db.prepare("SELECT COUNT(*) AS n FROM saves WHERE slot IN ('test', 'meta-big', 'huge')").get().n, 0);
+  assert.equal(srv.db.prepare("SELECT COUNT(*) AS n FROM saves WHERE slot IN ('test', 'meta-big', 'huge', 'inflated')").get().n, 0);
 });
 
 serverTest('Spielstände: höchstens 20 Slots pro Konto', async (srv) => {
@@ -645,12 +652,12 @@ serverTest('Punkte: einreichen, eigene Bestwerte und Bestenliste', async (srv) =
   assert.equal(typeof r1.json.id, 'number');
   assert.equal(r1.json.best, 120);
   srv.advance(1000);
-  assert.equal((await alice.post('/api/scores', validScore({ score: 340, week: 6 }))).json.best, 340);
+  assert.equal((await alice.post('/api/scores', validScore({ score: 340, week: 4 }))).json.best, 340);
   srv.advance(1000);
   assert.equal((await alice.post('/api/scores', validScore({ score: 90 }))).json.best, 340);
 
   srv.advance(1000);
-  await bob.post('/api/scores', validScore({ score: 500, area: 'Zona Sur', seed: 'abc' }));
+  await bob.post('/api/scores', validScore({ score: 500, area: 'Zona Sur', seed: 'ABC' }));
   srv.advance(1000);
   await bob.post('/api/scores', validScore({ score: 20 }));
   srv.advance(1000);
@@ -675,7 +682,7 @@ serverTest('Punkte: einreichen, eigene Bestwerte und Bestenliste', async (srv) =
   );
   const top = aliceMine.json.scores[0];
   assert.deepEqual(Object.keys(top).sort(), ['area', 'createdAt', 'score', 'seed', 'time', 'week']);
-  assert.equal(top.week, 6);
+  assert.equal(top.week, 4);
   assert.equal(top.time, 321.5);
   assert.equal(top.area, 'El Alto');
 
@@ -692,8 +699,8 @@ serverTest('Punkte: einreichen, eigene Bestwerte und Bestenliste', async (srv) =
   );
   assert.deepEqual(Object.keys(lb.json.scores[0]).sort(), ['area', 'createdAt', 'score', 'seed', 'username', 'week']);
   assert.equal(lb.json.scores[0].area, 'Zona Sur');
-  assert.equal(lb.json.scores[0].seed, 'abc');
-  assert.equal(lb.json.scores[1].week, 6);
+  assert.equal(lb.json.scores[0].seed, 'ABC');
+  assert.equal(lb.json.scores[1].week, 4);
   assert.doesNotMatch(lb.text, /pass_hash|user_id|\$2[aby]\$/);
 });
 
@@ -731,8 +738,20 @@ serverTest('Punkte: Validierung', async (srv) => {
     { area: null },
     { time: -1 },
     { time: 1e7 + 1 },
+    { time: 86_401 },
     { time: '12' },
     { time: null },
+    // Plausibilität: Startgebiet und Seed wie im Spiel, Woche passend zur Zeit, nicht zu viele Fahrgäste
+    { area: 'Centro' },
+    { area: '' },
+    { seed: 'abc' },
+    { seed: '' },
+    { seed: 'A'.repeat(13) },
+    { week: 9 },
+    { week: 1, time: 1000 },
+    { score: 5000 },
+    { score: 10_000_000, week: 1, time: 0 },
+    { score: 21, week: 1, time: 0 },
   ];
   for (const over of bad) {
     srv.advance(MINUTE); // Limit pro Konto zählt jede Anfrage
@@ -747,12 +766,12 @@ serverTest('Punkte: Validierung', async (srv) => {
 
   const edge = await c.post(
     '/api/scores',
-    validScore({ score: 10_000_000, week: 999, seed: 'x'.repeat(32), area: 'y'.repeat(40), time: 1e7 }),
+    validScore({ score: 1500, week: 5, seed: 'Z'.repeat(12), area: 'Ciudad Satélite', time: 321.5 }),
   );
   assert.equal(edge.status, 201);
-  const zero = await c.post('/api/scores', validScore({ score: 0, week: 1, seed: '', area: '', time: 0 }));
+  const zero = await c.post('/api/scores', validScore({ score: 0, week: 1, seed: 'A', area: 'Zentrum', time: 0 }));
   assert.equal(zero.status, 201);
-  assert.equal(zero.json.best, 10_000_000);
+  assert.equal(zero.json.best, 1500);
 });
 
 serverTest('Punkte: Limit pro Konto, höchstens 50 gespeicherte Ergebnisse, Bestwert-Tabelle', async (srv) => {
@@ -808,7 +827,7 @@ serverTest('Punkte: seed und area ohne HTML-Sonderzeichen', async (srv) => {
     assert.equal(res.status, 400, JSON.stringify(over));
     assert.equal(typeof res.json.error, 'string');
   }
-  for (const area of ['Ciudad Satélite', 'Valle de las Ánimas', 'Plaza España', '16 de Julio', '']) {
+  for (const area of ['Ciudad Satélite', 'Villa Fátima', 'Zona Sur', 'El Alto']) {
     srv.advance(MINUTE);
     const res = await c.post('/api/scores', validScore({ area, seed: 'X7K9Q2' }));
     assert.equal(res.status, 201, area);
@@ -897,13 +916,36 @@ serverTest('Rate-Limit: 30 Login-Versuche pro IP in 15 Minuten', async (srv) => 
   assert.equal((await c.post('/api/auth/login', { username: 'user99', password: 'falsch123' })).status, 401);
 });
 
-serverTest('Rate-Limit: 10 Registrierungen pro IP und Stunde', async (srv) => {
-  for (let i = 0; i < 10; i++) await registered(srv, `neu${i}`);
-  const blocked = await srv.client().post('/api/auth/register', { username: 'neu10', password: 'geheim123' });
+serverTest('Rate-Limit: 20 neue Konten pro IP und Stunde, Fehlversuche zählen nicht', async (srv) => {
+  for (let i = 0; i < 20; i++) {
+    await registered(srv, `neu${i}`);
+    // vergeblicher Versuch (Name vergeben) verbraucht kein Kontingent
+    if (i < 19) {
+      assert.equal((await srv.client().post('/api/auth/register', { username: `neu${i}`, password: 'geheim123' })).status, 409);
+    }
+  }
+  const blocked = await srv.client().post('/api/auth/register', { username: 'neu20', password: 'geheim123' });
   assert.equal(blocked.status, 429);
   assert.equal(typeof blocked.json.error, 'string');
   srv.advance(60 * MINUTE);
-  await registered(srv, 'neu10');
+  await registered(srv, 'neu20');
+  // insgesamt höchstens 60 Versuche pro Stunde
+  for (let i = 0; i < 60 - 1; i++) await srv.client().post('/api/auth/register', { username: 'x', password: 'kurz' });
+  assert.equal((await srv.client().post('/api/auth/register', { username: 'neu21', password: 'geheim123' })).status, 429);
+});
+
+serverTest('Rate-Limit: erfolgreiche Anmeldungen zählen nicht gegen das IP-Limit', async (srv) => {
+  for (let i = 0; i < 3; i++) await registered(srv, `klasse${i}`, 'richtig123');
+  srv.advance(60 * MINUTE);
+  const c = srv.client();
+  for (let i = 0; i < 40; i++) {
+    const res = await c.post('/api/auth/login', { username: `klasse${i % 3}`, password: 'richtig123' });
+    assert.equal(res.status, 200, `Anmeldung ${i + 1}`);
+  }
+  for (let i = 0; i < 30; i++) {
+    assert.equal((await c.post('/api/auth/login', { username: 'klasse0', password: 'falsch123' })).status, i < 8 ? 401 : 429);
+    srv.advance(1000);
+  }
 });
 
 test('RateLimiter: Speicher bleibt begrenzt', () => {
@@ -953,17 +995,29 @@ serverTest('Rate-Limit: an der Fenstergrenze höchstens 8 Fehlversuche in 15 Min
   assert.deepEqual(statuses, [401, 429, 429, 429, 429, 429, 429, 429]);
 });
 
-test('RateLimiter: volle Tabelle verdrängt keine laufenden Zähler', () => {
+test('RateLimiter: volle Tabelle verdrängt nur ungesperrte Zähler', () => {
   let t = 0;
   const rl = new RateLimiter({ limit: 2, windowMs: 1000, now: () => t, maxKeys: 3 });
   rl.hit('opfer');
   rl.hit('opfer');
   assert.equal(rl.blocked('opfer'), true);
   t = 10;
-  for (let i = 0; i < 50; i++) if (!rl.blocked(`müll${i}`)) rl.hit(`müll${i}`);
+  // Flut mit Einzelversuchen: neue Clients werden nicht ausgesperrt, die Sperre bleibt
+  for (let i = 0; i < 50; i++) {
+    assert.equal(rl.blocked(`müll${i}`), false, `müll${i}`);
+    rl.hit(`müll${i}`);
+  }
   assert.equal(rl.size, 3);
   assert.equal(rl.blocked('opfer'), true, 'Sperre bleibt trotz Flut bestehen');
-  assert.equal(rl.blocked('neu'), true, 'neue Schlüssel bei voller Tabelle gesperrt');
+  assert.equal(rl.blocked('neu'), false, 'neue Schlüssel bekommen Platz');
+  // Ist die Tabelle voll gesperrter Zähler, gilt auch ein neuer Schlüssel als gesperrt
+  for (const k of ['a', 'b']) {
+    rl.hit(k);
+    rl.hit(k);
+  }
+  assert.equal(rl.size, 3);
+  assert.equal(rl.blocked('opfer'), true);
+  assert.equal(rl.blocked('neu'), true);
   assert.equal(rl.retryAfter('neu'), 1);
   t = 1000; // die Einträge von „opfer“ laufen ab und machen Platz
   assert.equal(rl.blocked('neu'), false);
@@ -1101,6 +1155,32 @@ serverTest('CSRF: fremde Herkunft → 403', async (srv) => {
   const read = await c.get('/api/auth/me', { headers: { origin: 'https://evil.example', 'sec-fetch-site': 'cross-site' } });
   assert.equal(read.status, 200);
   assert.equal(read.json.user.username, 'mallory');
+});
+
+serverTest(
+  'CSRF: PUBLIC_ORIGIN hinter einem Proxy, der den Host-Header umschreibt',
+  async (srv) => {
+    const body = { username: 'proxy', password: 'geheim123' };
+    const evil = await srv.client().post('/api/auth/register', body, { headers: { origin: 'https://evil.example' } });
+    assert.equal(evil.status, 403);
+    // Host-Header passt nicht (127.0.0.1:port), die öffentliche Herkunft schon
+    const ok = await srv.client().post('/api/auth/register', body, { headers: { origin: 'https://Teleferico.example' } });
+    assert.equal(ok.status, 201);
+    const crossSite = await srv.client().post('/api/auth/login', body, {
+      headers: { origin: 'https://teleferico.example', 'sec-fetch-site': 'cross-site' },
+    });
+    assert.equal(crossSite.status, 403);
+  },
+  { publicOrigins: parsePublicOrigins('https://teleferico.example') },
+);
+
+test('PUBLIC_ORIGIN: nur gültige Herkünfte', () => {
+  assert.deepEqual(parsePublicOrigins(undefined), []);
+  assert.deepEqual(parsePublicOrigins(' '), []);
+  assert.deepEqual(parsePublicOrigins('https://a.example/, http://localhost:3000'), ['https://a.example', 'http://localhost:3000']);
+  for (const bad of ['a.example', 'ftp://a.example', 'https://a.example/spiel', 'https://a.example?x=1']) {
+    assert.throws(() => parsePublicOrigins(bad), /PUBLIC_ORIGIN/, bad);
+  }
 });
 
 // ---------------------------------------------------------------- Frontend-Auslieferung
@@ -1244,7 +1324,7 @@ serverTest('Browser-Client src/api.js gegen den Server', async (srv) => {
     assert.equal(await api.deleteSave('auto'), true);
     assert.equal(await api.deleteSave('auto'), false);
 
-    const sc = await api.submitScore({ score: 42, week: 2, seed: 123456, area: 'Centro', time: 12.5 });
+    const sc = await api.submitScore({ score: 42, week: 2, seed: 123456, area: 'Zentrum', time: 120 });
     assert.equal(sc.best, 42);
     assert.equal((await api.myScores())[0].seed, '123456');
     assert.deepEqual(

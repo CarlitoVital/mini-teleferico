@@ -7,6 +7,7 @@ import express from 'express';
 import bcrypt from 'bcrypt';
 import { openDb } from './db.js';
 import { RateLimiter, ipKey } from './ratelimit.js';
+import { implausible } from './plausible.js';
 import {
   SESSION_COOKIE,
   SESSION_TTL_MS,
@@ -21,19 +22,22 @@ import {
 const ROOT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 const API_VERSION = 1;
-const BODY_LIMIT = '2mb';
+const BODY_LIMIT = '512kb';
+// Gespeicherter Spielstand nach erneutem Serialisieren (echte Stände: 10–60 KB)
+const MAX_DATA_BYTES = 256 * 1024;
 const USERNAME_RE = /^[A-Za-z0-9_.-]{3,24}$/;
 const SLOT_RE = /^[a-z0-9-]{1,40}$/;
 const PASSWORD_MIN = 8;
 const PASSWORD_MAX = 128;
 const MAX_SLOTS = 20;
+const MAX_ACCOUNT_BYTES = 2 * 1024 * 1024; // alle Spielstände eines Kontos zusammen
 const MAX_META_CHARS = 4000;
 const MAX_DEPTH = 100;
 const MAX_SCORE = 10_000_000;
 const MAX_WEEK = 999;
 const MAX_SEED = 32;
 const MAX_AREA = 40;
-const MAX_TIME = 1e7;
+const MAX_TIME = 86_400; // Spielsekunden – keine Runde dauert annähernd so lange
 const MAX_SCORES_PER_USER = 50;
 // Öffentlich angezeigter Freitext: Buchstaben (auch mit Akzent), Ziffern, Leerzeichen, wenige Satzzeichen
 const LABEL_RE = /^[\p{L}\p{M}\p{N} _.,:#()\/+-]*$/u;
@@ -50,7 +54,7 @@ const MSG = {
   saveNotFound: 'Spielstand nicht gefunden.',
   apiNotFound: 'Unbekannter API-Endpunkt.',
   badJson: 'Ungültiges JSON.',
-  tooLarge: 'Anfrage zu groß (max. 2 MB).',
+  tooLarge: 'Anfrage zu groß (max. 512 KB).',
   savesLimited: 'Zu viele Speichervorgänge. Bitte kurz warten.',
   scoresLimited: 'Zu viele Ergebnisse in kurzer Zeit. Bitte kurz warten.',
   badRequest: 'Ungültige Anfrage.',
@@ -139,6 +143,10 @@ function parseSaveBody(body) {
   if (metaJson.length > MAX_META_CHARS) {
     throw new HttpError(400, `„meta“ ist zu groß (höchstens ${MAX_META_CHARS} Zeichen).`);
   }
+  // Nach dem Serialisieren prüfen: Zahlen wie 9e20 werden dabei viel länger als im Request
+  if (Buffer.byteLength(dataJson, 'utf8') > MAX_DATA_BYTES) {
+    throw new HttpError(413, `Spielstand ist zu groß (höchstens ${MAX_DATA_BYTES / 1024} KB).`);
+  }
   return { metaJson, dataJson };
 }
 
@@ -157,8 +165,10 @@ function parseScoreBody(body) {
     throw new HttpError(400, `„area“ muss ein Text mit höchstens ${MAX_AREA} Zeichen sein (ohne Sonderzeichen wie < > & " ').`);
   }
   if (typeof time !== 'number' || !Number.isFinite(time) || time < 0 || time > MAX_TIME) {
-    throw new HttpError(400, '„time“ muss eine Zahl von 0 bis 10.000.000 sein.');
+    throw new HttpError(400, `„time“ muss eine Zahl von 0 bis ${MAX_TIME} sein.`);
   }
+  const problem = implausible({ score, week, seed, area, time });
+  if (problem) throw new HttpError(400, `Ergebnis abgelehnt: ${problem}`);
   return { score, week, seed, area, time };
 }
 
@@ -186,6 +196,7 @@ export function createApp({
   now = () => Date.now(),
   bcryptRounds = 12,
   trustProxy = false,
+  publicOrigins = [],
 } = {}) {
   if (!dbPath) throw new TypeError('createApp: dbPath fehlt.');
   const db = openDb(dbPath);
@@ -209,6 +220,9 @@ export function createApp({
     getSave: db.prepare('SELECT meta, data, updated_at FROM saves WHERE user_id = ? AND slot = ?'),
     saveExists: db.prepare('SELECT 1 FROM saves WHERE user_id = ? AND slot = ?'),
     countSaves: db.prepare('SELECT COUNT(*) AS n FROM saves WHERE user_id = ?'),
+    otherSavesBytes: db.prepare(
+      'SELECT COALESCE(SUM(length(CAST(data AS BLOB))), 0) AS n FROM saves WHERE user_id = ? AND slot <> ?',
+    ),
     upsertSave: db.prepare(
       `INSERT INTO saves (user_id, slot, meta, data, updated_at) VALUES (?, ?, ?, ?, ?)
        ON CONFLICT (user_id, slot) DO UPDATE
@@ -243,6 +257,9 @@ export function createApp({
     if (!q.saveExists.get(userId, slot) && q.countSaves.get(userId).n >= MAX_SLOTS) {
       throw new HttpError(409, `Höchstens ${MAX_SLOTS} Spielstände pro Konto – bitte zuerst einen löschen.`);
     }
+    if (q.otherSavesBytes.get(userId, slot).n + Buffer.byteLength(dataJson, 'utf8') > MAX_ACCOUNT_BYTES) {
+      throw new HttpError(409, 'Der Speicherplatz deines Kontos ist voll – bitte zuerst einen Spielstand löschen.');
+    }
     q.upsertSave.run(userId, slot, metaJson, dataJson, t);
   });
 
@@ -255,9 +272,14 @@ export function createApp({
   // Vergleichshash für unbekannte Benutzer, damit die Antwortzeit nichts verrät
   const dummyHash = bcrypt.hashSync(prehash('teleferico-kein-konto'), bcryptRounds);
 
+  // Je IP zählen nur Fehlversuche bzw. angelegte Konten – viele Spieler hinter einer Adresse
+  // (Schule, Mobilfunk-NAT) sollen sich nicht gegenseitig aussperren. Die Gesamt-Limits begrenzen
+  // zusätzlich die bcrypt-Last.
   const loginIpLimiter = new RateLimiter({ limit: 30, windowMs: 15 * MINUTE, now });
+  const loginIpTotal = new RateLimiter({ limit: 300, windowMs: 15 * MINUTE, now });
   const loginUserLimiter = new RateLimiter({ limit: 8, windowMs: 15 * MINUTE, now });
-  const registerIpLimiter = new RateLimiter({ limit: 10, windowMs: 60 * MINUTE, now });
+  const registerIpLimiter = new RateLimiter({ limit: 20, windowMs: 60 * MINUTE, now });
+  const registerIpTotal = new RateLimiter({ limit: 60, windowMs: 60 * MINUTE, now });
   // Schreibzugriffe je Konto, damit ein einzelnes Konto den Server nicht auslasten kann
   const saveUserLimiter = new RateLimiter({ limit: 30, windowMs: MINUTE, now });
   const scoreUserLimiter = new RateLimiter({ limit: 10, windowMs: MINUTE, now });
@@ -292,6 +314,8 @@ export function createApp({
 
   // ---------------------------------------------------------------- Middleware
 
+  const allowedOrigins = new Set(publicOrigins.map((o) => o.toLowerCase()));
+
   /** CSRF-Schutz: schreibende Anfragen nur von derselben Herkunft. */
   function csrfGuard(req, res, next) {
     if (SAFE_METHODS.has(req.method)) return next();
@@ -304,6 +328,11 @@ export function createApp({
         originHost = new URL(origin).host;
       } catch {
         originHost = null;
+      }
+      if (allowedOrigins.size > 0) {
+        // Hinter einem Proxy, der den Host-Header umschreibt: feste Liste erlaubter Herkünfte
+        if (!allowedOrigins.has(origin.toLowerCase())) throw new HttpError(403, MSG.csrf);
+        return next();
       }
       const host = (trustProxy ? req.host : req.get('host')) || '';
       if (!originHost || originHost.toLowerCase() !== host.toLowerCase()) throw new HttpError(403, MSG.csrf);
@@ -374,16 +403,21 @@ export function createApp({
     res.json({ ok: true, version: API_VERSION });
   });
 
-  api.post('/auth/register', ipGate(registerIpLimiter, MSG.registerLimited), json, async (req, res) => {
+  api.post('/auth/register', ipGate(registerIpTotal, MSG.registerLimited), json, async (req, res) => {
+    const ip = clientIp(req);
+    if (registerIpLimiter.blocked(ip)) return tooMany(res, registerIpLimiter, ip, MSG.registerLimited);
     const { username, password } = bodyOf(req);
     const problem = checkUsername(username) ?? checkPassword(password);
     if (problem) throw new HttpError(400, problem);
     if (q.userByName.get(username)) throw new HttpError(409, MSG.taken);
-    const hash = await bcrypt.hash(prehash(password), bcryptRounds);
+    // Vor dem (asynchronen) Hashen zählen, damit parallele Anfragen das Limit nicht umgehen
+    registerIpLimiter.hit(ip);
     let id;
     try {
+      const hash = await bcrypt.hash(prehash(password), bcryptRounds);
       id = Number(q.insertUser.run(username, hash, now()).lastInsertRowid);
     } catch (err) {
+      registerIpLimiter.undo(ip); // kein Konto angelegt
       // gleichzeitige Registrierung desselben Namens
       if (err?.code === 'SQLITE_CONSTRAINT_UNIQUE') throw new HttpError(409, MSG.taken);
       throw err;
@@ -393,7 +427,11 @@ export function createApp({
     res.status(201).json({ user: { id, username } });
   });
 
-  api.post('/auth/login', ipGate(loginIpLimiter, MSG.loginLimited), json, async (req, res) => {
+  api.post('/auth/login', ipGate(loginIpTotal, MSG.loginLimited), json, async (req, res) => {
+    const ip = clientIp(req);
+    if (loginIpLimiter.blocked(ip)) return tooMany(res, loginIpLimiter, ip, MSG.loginLimited);
+    // Als Fehlversuch zählen; ein erfolgreicher Login nimmt ihn unten wieder zurück
+    loginIpLimiter.hit(ip);
     const { username, password } = bodyOf(req);
     if (typeof username !== 'string' || typeof password !== 'string' || !username || !password) {
       throw new HttpError(400, 'Bitte Benutzername und Passwort angeben.');
@@ -410,6 +448,7 @@ export function createApp({
     const ok = await bcrypt.compare(prehash(password), user ? user.pass_hash : dummyHash);
     if (!user || !ok) throw new HttpError(401, MSG.loginFailed);
     loginUserLimiter.reset(key);
+    loginIpLimiter.undo(ip);
     dropCurrentSession(req);
     startSession(res, user.id);
     res.json({ user: { id: user.id, username: user.username } });

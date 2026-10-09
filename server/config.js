@@ -37,3 +37,27 @@ export function parseTrustProxy(raw) {
       'oder eine kommagetrennte Liste von IP-Adressen/CIDR-Bereichen (z. B. „loopback, 10.0.0.0/8“).',
   );
 }
+
+/**
+ * PUBLIC_ORIGIN → Liste erlaubter Herkünfte für schreibende Anfragen, z. B.
+ * „https://teleferico.example“ (mehrere kommagetrennt). Leer: Vergleich mit dem Host-Header.
+ */
+export function parsePublicOrigins(raw) {
+  if (raw === undefined || raw === null || String(raw).trim() === '') return [];
+  return String(raw)
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((entry) => {
+      let url;
+      try {
+        url = new URL(entry);
+      } catch {
+        url = null;
+      }
+      if (!url || !/^https?:$/.test(url.protocol) || url.origin.toLowerCase() !== entry.replace(/\/$/, '').toLowerCase()) {
+        throw new Error(`Ungültiger Wert für PUBLIC_ORIGIN: „${entry}“. Erwartet wird z. B. „https://teleferico.example“.`);
+      }
+      return url.origin;
+    });
+}

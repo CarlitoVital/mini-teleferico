@@ -73,9 +73,7 @@ export class CityMap {
     if (!T.inBounds(x, y, 40)) return { ok: false, reason: 'rand' };
     if (T.maxSlopeAround(x, y, r + 4) > CONFIG.maxBuildSlope) return { ok: false, reason: 'steil' };
     if (T.inLake(x, y, r + 10)) return { ok: false, reason: 'see' };
-    const ri = T.riverInfo(x, y);
-    const clear = ri.river && !ri.river.minor ? r + 14 + ri.gorge * 0.15 : r + 4;
-    if (ri.d < clear) return { ok: false, reason: 'fluss' };
+    if (T.nearWater(x, y, r)) return { ok: false, reason: 'fluss' };
     if (this.buildings && this.buildings.blockedNear(x, y, r + 12)) return { ok: false, reason: 'gebäude' };
     return { ok: true };
   }
@@ -115,10 +113,11 @@ export class CityMap {
       if (blocked || !this.buildable(x, y).ok) continue;
       let score = weightFn(this.zoneAt(x, y)) * (0.12 + this.urbanAt(x, y)) * (0.35 + rng());
       if (stations.length && dmin > maxNear) score *= 0.3;
-      if (score > bestScore) {
-        bestScore = score;
-        best = { x, y };
-      }
+      if (score <= bestScore) continue;
+      // teure Zusatzprüfung nur für Kandidaten, die sonst gewinnen würden
+      if (opts.accept && !opts.accept(x, y)) continue;
+      bestScore = score;
+      best = { x, y };
     }
     return best;
   }
@@ -151,16 +150,21 @@ export class CityMap {
    * – blocked: Strecke nicht baubar (reason erklärt warum)
    */
   mastPlan(a, b) {
-    const cacheable = a.id !== undefined && b.id !== undefined;
-    if (!cacheable) return this.computeMastPlan(a, b);
-    const swap = b.id < a.id;
+    // Immer in derselben geometrischen Richtung rechnen (West→Ost, sonst Nord→Süd): So braucht eine
+    // Strecke gleich viele Masten, egal in welche Richtung gezogen wird oder welche Station älter ist.
+    const swap = b.x < a.x || (b.x === a.x && b.y < a.y);
     const lo = swap ? b : a;
     const hi = swap ? a : b;
-    const key = `${lo.id}-${hi.id}`;
-    let plan = this.planCache.get(key);
-    if (!plan) {
+    let plan;
+    if (a.id !== undefined && b.id !== undefined) {
+      const key = `${lo.id}-${hi.id}`;
+      plan = this.planCache.get(key);
+      if (!plan) {
+        plan = this.computeMastPlan(lo, hi);
+        this.planCache.set(key, plan);
+      }
+    } else {
       plan = this.computeMastPlan(lo, hi);
-      this.planCache.set(key, plan);
     }
     if (!swap) return plan;
     return { ...plan, ts: plan.ts.map((t) => 1 - t).reverse(), kinds: plan.kinds.slice().reverse(), tallTs: plan.tallTs.map((t) => 1 - t) };
@@ -215,10 +219,17 @@ export class CityMap {
     const chain = [{ t: 0 }, ...supports.slice(), { t: 1 }];
     for (let i = 0; i < chain.length - 1; i++) clearSpan(chain[i], chain[i + 1], 0);
     supports.sort((p, q) => p.t - q.t);
+    // Pflicht-Stützen (Schlucht, Kante) dicht an einer Station an den Mindestabstand rücken;
+    // reine Bodenfreiheit trägt dort der Stationsturm
+    const edge = Math.min(0.5, 30 / len);
+    for (const s of supports) {
+      if (s.kind === 'schlucht' || s.kind === 'kante') s.t = clamp(s.t, edge, 1 - edge);
+    }
+    supports.sort((p, q) => p.t - q.t);
     // nahe Stützen zusammenfassen
     const merged = [];
     for (const s of supports) {
-      if (s.t * len < 30 || (1 - s.t) * len < 30) continue;
+      if (s.kind === 'gelände' && (s.t * len < 30 || (1 - s.t) * len < 30)) continue;
       const last = merged[merged.length - 1];
       if (last && (s.t - last.t) * len < 45) continue;
       merged.push(s);
