@@ -306,7 +306,8 @@ export class Persistence {
     const name = userName();
     let server;
     try {
-      server = new Set((await api.listSaves()).map((r) => r.slot));
+      // Markierungen beendeter Runden belegen keinen Platz
+      server = new Set((await api.listSaves()).filter((r) => !r.meta?.over).map((r) => r.slot));
     } catch (err) {
       throw this.#check(err);
     }
