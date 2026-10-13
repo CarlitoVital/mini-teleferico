@@ -80,9 +80,11 @@ export class Persistence {
     return { meta: saveMeta(game, { runId, owner }), data: serializeGame(game, camera) };
   }
 
-  /** Speichert lokal und (falls angemeldet) im Konto. Liefert { local, server, error }. */
-  async save(slotId, game, camera, runId) {
-    const key = localKey(slotId);
+  /**
+   * Speichert lokal und (falls angemeldet) im Konto. Liefert { local, server, error }.
+   * key: lokaler Schlüssel aus der angezeigten Liste (sonst der des aktuellen Kontos).
+   */
+  async save(slotId, game, camera, runId, key = localKey(slotId)) {
     const online = this.online;
     const { meta, data } = this.snapshot(game, camera, runId);
     const result = { local: false, server: null, error: null };
@@ -104,14 +106,17 @@ export class Persistence {
     return result;
   }
 
-  /** Beim Verlassen der Seite: lokal schreiben und per Beacon ans Konto schicken. */
+  /**
+   * Beim Verlassen der Seite: lokal schreiben und per Beacon ans Konto schicken.
+   * Liefert false, wenn der Beacon nicht angenommen wurde (sonst true bzw. null ohne Konto).
+   */
   saveOnExit(game, camera, runId) {
     try {
       const { meta, data } = this.snapshot(game, camera, runId);
       localSaves.put(localKey('auto'), meta, data);
-      if (this.online) api.beaconSave('auto', meta, data);
+      return this.online ? api.beaconSave('auto', meta, data) : null;
     } catch {
-      // beim Verlassen nichts mehr melden
+      return false;
     }
   }
 
@@ -133,6 +138,7 @@ export class Persistence {
         out.set(r.id, r);
       }
     }
+    out.prefix = prefix;
     return out;
   }
 
@@ -153,11 +159,13 @@ export class Persistence {
     // Nur der automatische Stand einer beendeten Runde verschwindet – manuell gespeicherte Plätze bleiben
     const finished = finishedRuns();
     const visible = (slot, meta) => (slot.kind === 'auto' && isFinishedAuto(meta, finished) ? null : meta || null);
+    // Erst das Konto fragen: Meldet es 401, gilt man danach als Gast – die lokalen Zeilen passen dann dazu
+    const server = this.online ? await this.#serverRows() : null;
     const local = await this.#localRows();
-    const entries = SLOTS.map((s) => ({ ...s, source: 'local', meta: visible(s, local.get(s.id)?.meta) }));
+    // Schlüssel festhalten, damit Laden/Löschen dieselbe Zeile trifft, die angezeigt wurde
+    const entries = SLOTS.map((s) => ({ ...s, source: 'local', key: local.prefix + s.id, meta: visible(s, local.get(s.id)?.meta) }));
     let error = null;
-    if (this.online) {
-      const server = await this.#serverRows();
+    if (server) {
       error = server.error;
       if (!error) {
         const byId = new Map(server.rows.map((r) => [r.slot, r]));
@@ -176,7 +184,6 @@ export class Persistence {
    * Konto-Platz als „leer“ erscheinen und unbemerkt überschrieben).
    */
   async saveSlots() {
-    const local = await this.#localRows();
     let server = new Map();
     let error = null;
     if (this.online) {
@@ -185,10 +192,18 @@ export class Persistence {
       server = new Map(res.rows.map((r) => [r.slot, r]));
     }
     const online = this.online; // nach einem 401 nicht mehr angemeldet
+    const local = await this.#localRows();
     const entries = SLOTS.filter((s) => s.kind === 'slot').map((s) => {
       const l = local.get(s.id)?.meta || null;
       const r = server.get(s.id)?.meta || null;
-      return { ...s, source: online ? 'both' : 'local', meta: online ? newer(l, r) : l, hasLocal: !!l, hasServer: !!r };
+      return {
+        ...s,
+        source: online ? 'both' : 'local',
+        key: local.prefix + s.id,
+        meta: online ? newer(l, r) : l,
+        hasLocal: !!l,
+        hasServer: !!r,
+      };
     });
     return { entries, error };
   }
@@ -217,7 +232,7 @@ export class Persistence {
         throw this.#check(err);
       }
     }
-    if (entry.source !== 'server') await localSaves.remove(localKey(entry.id));
+    if (entry.source !== 'server') await localSaves.remove(entry.key || localKey(entry.id));
   }
 
   /**
@@ -227,8 +242,15 @@ export class Persistence {
    */
   async latestAuto() {
     const candidates = [];
+    // Konto zuerst (ein 401 macht danach zum Gast), dann die passenden lokalen Zeilen
+    if (this.online) {
+      const server = await this.#serverRows();
+      const row = server.rows.find((r) => r.slot === 'auto');
+      if (row?.meta) candidates.push({ ...SLOTS[0], source: 'server', meta: row.meta });
+    }
     const local = await this.#localRows();
-    if (local.get('auto')?.meta) candidates.push({ ...SLOTS[0], source: 'local', meta: local.get('auto').meta });
+    const own = local.get('auto');
+    if (own?.meta) candidates.push({ ...SLOTS[0], source: 'local', key: local.prefix + 'auto', meta: own.meta });
     if (api.user) {
       try {
         const guest = (await localSaves.list()).find((r) => r.id === 'auto' && isGuestRow(r));
@@ -236,11 +258,6 @@ export class Persistence {
       } catch {
         // ohne Speicher keine Gast-Stände
       }
-    }
-    if (this.online) {
-      const server = await this.#serverRows();
-      const row = server.rows.find((r) => r.slot === 'auto');
-      if (row?.meta) candidates.push({ ...SLOTS[0], source: 'server', meta: row.meta });
     }
     // Im Konto als beendet markierte Runden auch lokal merken (Runde auf einem anderen Gerät beendet)
     rememberFinished(candidates.filter((c) => c.meta.over === true).map((c) => c.meta.runId));

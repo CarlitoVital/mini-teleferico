@@ -163,5 +163,9 @@ export function deserializeGame(raw) {
   });
   game.router.dirty = true;
   game.networkChanged();
+  // Mastbedarf wird beim Laden neu berechnet. Hat sich eine Regel geändert, darf der Vorrat
+  // dadurch nicht ins Minus rutschen (sonst ließe sich nichts mehr bauen)
+  game.res.masts = Math.max(game.res.masts, game.mastsUsed);
+  game.res.tallMasts = Math.max(game.res.tallMasts, game.tallMastsUsed);
   return { game, camera: d.camera || null };
 }

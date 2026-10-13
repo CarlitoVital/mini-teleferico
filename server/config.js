@@ -55,7 +55,9 @@ export function parsePublicOrigins(raw) {
       } catch {
         url = null;
       }
-      if (!url || !/^https?:$/.test(url.protocol) || url.origin.toLowerCase() !== entry.replace(/\/$/, '').toLowerCase()) {
+      // Nur Schema, Host und Port – Umlaut-Domains und Standardports werden so normalisiert,
+      // wie Browser sie im Origin-Header senden (Punycode, ohne :443/:80)
+      if (!url || !/^https?:$/.test(url.protocol) || url.username || url.password || url.pathname !== '/' || url.search || url.hash) {
         throw new Error(`Ungültiger Wert für PUBLIC_ORIGIN: „${entry}“. Erwartet wird z. B. „https://teleferico.example“.`);
       }
       return url.origin;

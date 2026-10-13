@@ -267,6 +267,8 @@ export class UI {
     const { options, onChoose } = this.rewardChoices;
     if (i < 0 || i >= options.length) return;
     this.rewardChoices = null;
+    // Fokus der Karte freigeben, sonst schluckt der versteckte Knopf die nächste Leertaste
+    if (this.el.reward.contains(document.activeElement)) document.activeElement.blur();
     this.el.reward.hidden = true;
     onChoose(options[i]);
   }

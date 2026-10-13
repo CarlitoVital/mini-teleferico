@@ -80,3 +80,16 @@ test('Wochen-Belohnung bleibt beim Laden offen', () => {
   assert.equal(game.state, 'reward');
   assert.deepEqual(game.rewardOptions, g.rewardOptions);
 });
+
+test('Geänderte Mastregeln: geladener Stand rutscht nicht ins Minus', () => {
+  const g = playWithBot('MASTEN', 120);
+  assert.ok(g.mastsUsed > 0, 'Netz mit Masten');
+  const data = JSON.parse(JSON.stringify(serializeGame(g)));
+  // Stand aus einer Version, in der dieselben Strecken weniger Masten brauchten
+  data.res.masts = 0;
+  data.res.tallMasts = 0;
+  const { game } = deserializeGame(data);
+  assert.ok(game.mastsFree >= 0, `frei: ${game.mastsFree}`);
+  assert.ok(game.tallMastsFree >= 0, `hoch frei: ${game.tallMastsFree}`);
+  assert.equal(game.res.masts, game.mastsUsed);
+});

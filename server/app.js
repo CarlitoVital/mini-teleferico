@@ -441,7 +441,11 @@ export function createApp({
     const key = username.toLowerCase();
     // Bewusst laut Vorgabe: Die Sperre gilt auch für das richtige Passwort, sonst wäre sie wirkungslos.
     // Folge: Jeder kann ein Konto für 15 Minuten sperren (begrenzt durch das IP-Limit).
-    if (loginUserLimiter.blocked(key)) return tooMany(res, loginUserLimiter, key, MSG.loginLimited);
+    if (loginUserLimiter.blocked(key)) {
+      // Kein Passwort geprüft: zählt nicht gegen die IP (sonst sperrt ein Konto alle hinter derselben Adresse)
+      loginIpLimiter.undo(ip);
+      return tooMany(res, loginUserLimiter, key, MSG.loginLimited);
+    }
     // Versuch vor dem (asynchronen) Vergleich zählen, damit parallele Anfragen das Limit nicht umgehen
     loginUserLimiter.hit(key);
     const user = q.userByName.get(username);

@@ -151,8 +151,9 @@ export class Input {
     e.preventDefault();
     const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1;
     const dy = clamp(e.deltaY * unit, -240, 240);
-    // Rein seitliches Scrollen (Wischen zur Seite, Shift+Rad) zoomt nicht und lässt die Kamera folgen
-    if (Math.abs(dy) < 0.5) return;
+    // Rein seitliches Scrollen (Wischen zur Seite, Shift+Rad) zoomt nicht und lässt die Kamera folgen.
+    // Pinch auf dem Touchpad (ctrlKey) liefert oft winzige Werte – die zählen immer.
+    if (dy === 0 || (!e.ctrlKey && Math.abs(dy) < 0.5 && Math.abs(e.deltaX) > Math.abs(e.deltaY))) return;
     this.cam.zoomAt(e.clientX, e.clientY, Math.exp(-dy * (e.ctrlKey ? 0.006 : 0.0016)));
   }
 
@@ -424,9 +425,9 @@ export class Input {
   }
 
   /** Ungültige Station unter dem Zeiger merken; Hinweis nur einmal pro Station. */
-  markInvalid(drag, st, v, from) {
+  markInvalid(drag, st, v, from, next = null) {
     drag.invalidStation = st;
-    drag.invalidText = this.invalidText(v, from, st);
+    drag.invalidText = this.invalidText(v, from, st, next);
     if (drag.lastInvalid === st) return;
     drag.lastInvalid = st;
     this.ui.toast(drag.invalidText);
@@ -434,19 +435,20 @@ export class Input {
   }
 
   /** Kurzer Hinweis, warum eine Strecke nicht gebaut werden kann. */
-  invalidText(v, a, b) {
+  invalidText(v, a, b, next = null) {
     const g = this.game;
+    // Bedarf nur der neuen Strecke(n) a→b (und b→next beim Einfügen), nicht der ganzen Linie
+    const need = (key) => (a && b ? g.map.mastPlan(a, b)[key] + (next ? g.map.mastPlan(b, next)[key] : 0) : null);
     if (v.reason === 'blocked') return v.plan.reason;
     if (v.reason === 'tall') {
-      // nur diese Strecke zählen, nicht die ganze Linie
-      const need = a && b ? g.map.mastPlan(a, b).tall : v.tall;
-      const free = Math.max(0, v.tallFree - (v.tall - need));
-      return `Hier braucht das Seil ${need} ${need === 1 ? 'hohen Mast' : 'hohe Masten'} über Gebäude – frei: ${free}.`;
+      const n = need('tall') ?? v.tall;
+      const free = Math.max(0, v.tallFree - (v.tall - n));
+      return `Hier braucht das Seil ${n} ${n === 1 ? 'hohen Mast' : 'hohe Masten'} über Gebäude – frei: ${free}.`;
     }
     if (v.reason === 'masts' && a && b) {
-      const need = g.map.mastPlan(a, b).count;
-      const free = Math.max(0, v.free - (v.masts - need));
-      return `Zu wenig Masten: Diese Strecke braucht ${need} ${need === 1 ? 'Mast' : 'Masten'}, frei ${free === 1 ? 'ist' : 'sind'} ${free}.`;
+      const n = need('count');
+      const free = Math.max(0, v.free - (v.masts - n));
+      return `Zu wenig Masten: Diese Strecke braucht ${n} ${n === 1 ? 'Mast' : 'Masten'}, frei ${free === 1 ? 'ist' : 'sind'} ${free}.`;
     }
     return 'Diese Strecke lässt sich nicht bauen.';
   }
@@ -540,7 +542,8 @@ export class Input {
           chain.push(st);
           this.audio.snap(chain.length + 2);
         } else {
-          this.markInvalid(drag, st, v, chain.length ? chain[chain.length - 1] : a);
+          // eingefügt werden zwei Strecken: letzte Station → st und st → b
+          this.markInvalid(drag, st, v, chain.length ? chain[chain.length - 1] : a, b);
         }
       } else if (!chain.length && line.has(st)) {
         // Segment über eine Nachbarstation hinaus ziehen: Station wird übersprungen

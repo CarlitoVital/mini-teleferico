@@ -175,7 +175,8 @@ function wire(g) {
   g.on('lineChanged', (line) => {
     if (line.mastCount) mastHint();
   });
-  g.on('network', () => (lastSaved.dirty = true));
+  // Jede Änderung am Spielstand – auch in der Pause (Gondeln, Kabinen, Umsteigestationen)
+  for (const ev of ['network', 'gondola', 'resources']) g.on(ev, () => (lastSaved.dirty = true));
   g.on('station', () => {
     if (g.time > 0.5) audio.station();
   });
@@ -237,6 +238,8 @@ async function autosave() {
   if (!unsaved()) return;
   lastSaved = { time: game.time, dirty: false };
   const r = await persist.save('auto', game, cameraState(), runId);
+  // Konto-Kopie fehlgeschlagen: beim nächsten Autosave, Hauptmenü oder Verlassen erneut versuchen
+  if (r.server === false && persist.online) lastSaved.dirty = true;
   if (r.server === false && !autosave.warned) {
     autosave.warned = true;
     if (persist.online) ui.toast(`Konto-Speicherung fehlgeschlagen (${r.error}) – lokal gesichert.`);
@@ -248,7 +251,8 @@ async function autosave() {
 function saveOnExit() {
   if (!unsaved()) return;
   lastSaved = { time: game.time, dirty: false };
-  persist.saveOnExit(game, cameraState(), runId);
+  // Beacon abgelehnt (z. B. zu groß): beim nächsten Mal erneut senden
+  if (persist.saveOnExit(game, cameraState(), runId) === false) lastSaved.dirty = true;
 }
 
 async function refreshContinue() {
@@ -281,7 +285,7 @@ async function openSaves(mode) {
 
 async function saveToSlot(entry) {
   if (!game || game.demo || game.state === 'over') return;
-  const r = await persist.save(entry.id, game, cameraState(), runId);
+  const r = await persist.save(entry.id, game, cameraState(), runId, entry.key);
   audio.click();
   if (r.server === false) ui.toast(`Lokal gespeichert, Konto fehlgeschlagen: ${r.error}`);
   else ui.toast(`Gespeichert in ${entry.label}${r.server ? ' (lokal und im Konto)' : ''}.`);
@@ -501,7 +505,8 @@ function onDot(slot) {
 window.addEventListener('keydown', (e) => {
   if (e.repeat) return;
   const k = e.key;
-  const onButton = e.target instanceof HTMLButtonElement;
+  // Nur sichtbare Knöpfe behalten Leertaste/Enter für sich (ein versteckter Dialog behält manchmal den Fokus)
+  const onButton = e.target instanceof HTMLButtonElement && !e.target.closest('[hidden]');
   const inInput = e.target instanceof HTMLInputElement;
   if (ui.overlayOpen) {
     if (k === 'Escape') {

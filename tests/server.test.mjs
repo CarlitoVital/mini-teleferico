@@ -946,6 +946,13 @@ serverTest('Rate-Limit: erfolgreiche Anmeldungen zählen nicht gegen das IP-Limi
     assert.equal((await c.post('/api/auth/login', { username: 'klasse0', password: 'falsch123' })).status, i < 8 ? 401 : 429);
     srv.advance(1000);
   }
+  // Weitere Klicks auf das gesperrte Konto verbrauchen nicht das IP-Kontingent der anderen
+  const ok = await c.post('/api/auth/login', { username: 'klasse1', password: 'richtig123' });
+  assert.equal(ok.status, 200);
+  for (let i = 0; i < 22; i++) {
+    assert.equal((await c.post('/api/auth/login', { username: `fremd${i}`, password: 'falsch123' })).status, 401, `Fehlversuch ${i + 9}`);
+  }
+  assert.equal((await c.post('/api/auth/login', { username: 'klasse2', password: 'falsch123' })).status, 429, 'IP-Limit nach 30 echten Fehlversuchen');
 });
 
 test('RateLimiter: Speicher bleibt begrenzt', () => {
@@ -1178,7 +1185,11 @@ test('PUBLIC_ORIGIN: nur gültige Herkünfte', () => {
   assert.deepEqual(parsePublicOrigins(undefined), []);
   assert.deepEqual(parsePublicOrigins(' '), []);
   assert.deepEqual(parsePublicOrigins('https://a.example/, http://localhost:3000'), ['https://a.example', 'http://localhost:3000']);
-  for (const bad of ['a.example', 'ftp://a.example', 'https://a.example/spiel', 'https://a.example?x=1']) {
+  assert.deepEqual(parsePublicOrigins('https://seilbahn-münchen.de, https://a.example:443'), [
+    'https://xn--seilbahn-mnchen-8vb.de',
+    'https://a.example',
+  ]);
+  for (const bad of ['a.example', 'ftp://a.example', 'https://a.example/spiel', 'https://a.example?x=1', 'https://u:p@a.example']) {
     assert.throws(() => parsePublicOrigins(bad), /PUBLIC_ORIGIN/, bad);
   }
 });
