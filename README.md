@@ -63,6 +63,7 @@ The map is about 25 × 20 km (north up) and is computed from control points in `
   - across every **gorge** at least 35 m deep (Choqueyapu, Orkojahuira, Irpavi, Achocalla and many side quebradas),
   - on **steep edges** such as the Ceja (more than 70 m height difference over 240 m),
   - where a ridge would touch the cable (the cable hangs between 18 m high station towers and 30 m high line towers and needs 12 m of ground clearance).
+
   If your supply is not enough, the preview turns into a red dashed line. When you remove a section, you get its towers back.
 - **Altitude:** Gondolas are slower going uphill towards El Alto and a little faster going downhill.
 - **Building sites:** Stations only appear on buildable ground – not in gorges or rivers and not on slopes steeper than about 19 %.
@@ -109,16 +110,16 @@ The game is available in **German, English and Spanish**. Choose the language at
 | Station info | Hover over a station with the mouse or tap it briefly (name, altitude, waiting passengers) |
 | **Pan the map** | Hold the right (or middle) mouse button and drag · touch: drag with two fingers |
 | **Zoom** | Mouse wheel or touchpad · touch: pinch with two fingers |
-| Recenter the view | Button at the top right (appears after panning) or `C` |
+| Recentre the view | Button at the top right (appears after panning) or `C` |
 
-As long as you don't move the camera yourself, it automatically follows the growing city. After panning or zooming it stays where you put it until you recenter the view.
+As long as you don't move the camera yourself, it automatically follows the growing city. After panning or zooming it stays where you put it until you recentre the view.
 
 | Key | Function |
 | --- | --- |
 | `Space` | Pause / resume (you can also build while paused) |
 | `1` / `2` | Game speed 1× / 2× – in the reward dialog: choose a reward |
 | `+` / `-` | Zoom in / out |
-| `C` / `Home` | Recenter the view on the city |
+| `C` / `Home` | Recentre the view on the city |
 | `Del` / `Backspace` | Delete the selected line |
 | `M` | Sound on/off |
 | `Esc` | Cancel dragging, clear the selection, close a dialog or open the menu |

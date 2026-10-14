@@ -62,8 +62,7 @@ export default {
   'start.board': 'Bestenliste',
   'start.best': 'Rekord: {score} Fahrgäste · Woche {week}',
   'start.noBest': 'Noch kein Rekord – leg los!',
-  'start.rule1':
-    'Ziehe von Station zu Station, um eine Seilbahnlinie zu spannen. Mausrad, Rechtsklick oder zwei Finger bewegen die Karte.',
+  'start.rule1': 'Ziehe von Station zu Station, um eine Seilbahnlinie zu spannen. Rechte Maustaste oder zwei Finger verschieben die Karte, das Mausrad zoomt.',
   'start.rule2': 'Fahrgäste wollen zu einer Station mit ihrer Form – notfalls mit Umstieg.',
   'start.rule3':
     'Steile Kanten, tiefe Schluchten, Bergrücken und lange Spannweiten brauchen Masten. Bergauf sind Gondeln langsamer.',
