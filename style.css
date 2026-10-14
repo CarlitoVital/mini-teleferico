@@ -732,10 +732,63 @@ h2 {
   font-size: 12px;
 }
 
+/* Sprachauswahl (Startbildschirm oben rechts und Pausenmenü) */
+.start-panel {
+  position: relative;
+}
+
+.lang-corner {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+}
+
+.lang-switch {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 999px;
+  background: rgba(42, 42, 46, 0.07);
+}
+
+.lang-btn {
+  border: 0;
+  background: none;
+  padding: 4px 9px;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+
+.lang-btn:hover {
+  color: var(--ink);
+}
+
+.lang-btn.active {
+  background: var(--ink);
+  color: #fff;
+}
+
+.lang-btn:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.menu-lang {
+  margin-top: 16px;
+  display: flex;
+  justify-content: center;
+}
+
 .link-btn {
   border: 0;
   background: none;
   padding: 4px 0;
+  white-space: nowrap;
   font-weight: 700;
   font-size: 12px;
   color: var(--ink-soft);
@@ -1062,8 +1115,12 @@ h2 {
     font-size: 13px;
   }
 
-  .start-foot span {
+  .start-foot > .kbd-only {
     display: none;
+  }
+
+  .start-panel .logo {
+    margin-top: 22px;
   }
 
   .stats {

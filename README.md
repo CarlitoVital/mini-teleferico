@@ -1,201 +1,217 @@
 # Teleférico
 
-Ein minimalistisches Seilbahn-Strategiespiel im Browser. Du baust das Seilbahnnetz von **La Paz und El Alto** (Bolivien) – auf einer Karte, die der echten Topografie nachempfunden ist: das Hochplateau von El Alto (~4050 m), die zerklüftete Abbruchkante der *Ceja*, der Talkessel des Zentrums (~3600 m), das Tal des Río Choqueyapu und die Zona Sur (~3250 m).
+[Deutsch](README.de.md) · **English**
 
-Das Spiel selbst ist reines HTML5-Canvas und Vanilla JavaScript (ES-Module) ohne Build-Schritt. Es läuft am Desktop mit Maus und auf dem Handy mit Touch. Ein optionaler kleiner Node.js-Server ergänzt Konten, Spielstände im Konto und eine Bestenliste.
+A minimalist cable car strategy game for the browser. You build the cable car network of **La Paz and El Alto** (Bolivia) on a map modelled on the real topography: the El Alto plateau (~4,050 m), the jagged escarpment of the *Ceja*, the basin of the city centre (~3,600 m), the valley of the Río Choqueyapu and the Zona Sur (~3,250 m).
 
-## Starten
+The game itself is plain HTML5 Canvas and vanilla JavaScript (ES modules) with no build step. It runs on desktop with a mouse and on phones with touch. An optional small Node.js server adds accounts, saved games in your account and a leaderboard. The game is available in **German, English and Spanish**.
 
-### Mit Server (Konten, Speichern im Konto, Bestenliste)
+## Getting started
 
-Voraussetzung: Node.js 18 oder neuer.
+### With the server (accounts, saving to your account, leaderboard)
+
+Requirement: Node.js 18 or newer.
 
 ```bash
 npm install
 npm start          # → http://localhost:3000
 ```
 
-Der Server liefert das Spiel aus und stellt die API unter `/api` bereit. Die Daten liegen in einer SQLite-Datei (`server/data/teleferico.db`, wird automatisch angelegt). Einstellungen über Umgebungsvariablen:
+The server serves the game and provides the API under `/api`. Data is stored in an SQLite file (`server/data/teleferico.db`, created automatically). Settings via environment variables:
 
-| Variable | Bedeutung |
+| Variable | Meaning |
 | --- | --- |
-| `PORT` | Port des Servers (Standard `3000`) |
-| `TELEFERICO_DB` | Pfad zur SQLite-Datenbank |
-| `COOKIE_SECURE=1` | Sitzungs-Cookie nur über HTTPS senden (für den Betrieb hinter HTTPS) |
-| `TRUST_PROXY` | Hinter einem Reverse-Proxy: `1` (ein Proxy), eine Anzahl oder IP-/CIDR-Liste – damit das Rate-Limit die echte Client-IP sieht |
-| `PUBLIC_ORIGIN` | Öffentliche Adresse, z. B. `https://teleferico.example` (mehrere kommagetrennt). Nötig, wenn der Proxy den `Host`-Header umschreibt – sonst lehnt der Schutz vor fremden Seiten Anmelden und Speichern ab. Alternativ im Proxy den Host weiterreichen (nginx: `proxy_set_header Host $host;`). |
+| `PORT` | Server port (default `3000`) |
+| `TELEFERICO_DB` | Path to the SQLite database |
+| `COOKIE_SECURE=1` | Send the session cookie over HTTPS only (when running behind HTTPS) |
+| `TRUST_PROXY` | Behind a reverse proxy: `1` (one proxy), a number of proxies or a list of IPs/CIDR ranges – so that rate limiting sees the real client IP |
+| `PUBLIC_ORIGIN` | Public address, e.g. `https://teleferico.example` (several separated by commas). Needed when the proxy rewrites the `Host` header – otherwise the protection against requests from other sites rejects logins and saves. Alternatively, have the proxy pass the host through (nginx: `proxy_set_header Host $host;`). |
 
-Tests (Server-API, Spielstände, Frontend-Erkennung): `npm test`
+Tests (server API, saved games, translations, frontend detection): `npm test`
 
-### Ohne Server (nur Gastmodus)
+### Without the server (guest mode only)
 
-Jeder einfache statische Webserver genügt; Konten gibt es dann nicht, alles andere funktioniert:
+Any simple static web server will do; there are no accounts then, everything else works:
 
 ```bash
 npx serve .
-# oder
-python3 -m http.server 8000   # dann http://localhost:8000 öffnen
+# or
+python3 -m http.server 8000   # then open http://localhost:8000
 ```
 
-> **Hinweis zu `file://`:** Viele Browser blockieren JavaScript-Module, wenn die `index.html` direkt von der Festplatte geöffnet wird. Das Spiel zeigt dann einen Hinweis mit den Befehlen oben an.
+> **Note on `file://`:** Many browsers block JavaScript modules when `index.html` is opened directly from disk. The game then shows a notice with the commands above.
 
-## Spielregeln
+## How to play
 
-**Ziel:** Bring so viele Fahrgäste wie möglich ans Ziel. Der Punktestand ist die Zahl der beförderten Fahrgäste.
+**Goal:** Get as many passengers as possible to their destination. Your score is the number of passengers delivered.
 
-- **Stationen** erscheinen nach und nach als Formen: Kreis, Dreieck, Quadrat – später auch seltene Formen (Raute, Stern, Kreuz). Sie tragen Namen realer Stadtteile und entstehen bevorzugt dort, wo bebaute Stadt ist.
-- **Fahrgäste** tauchen als kleine Formen neben den Stationen auf. Jeder will zu *irgendeiner* Station mit seiner Form, wählt selbst den besten Weg durchs Netz und steigt dafür auch um.
-- **Linien** ziehst du von Station zu Station. Seilbahnen fahren nur auf **geraden Seilstrecken** – die Richtung ändert sich ausschließlich an Stationen.
-- **Gondeln** pendeln automatisch zwischen den Endstationen einer Linie. Jede Kabine fasst 6 Fahrgäste (große Kabine: 10).
-- **Überfüllung:** Warten an einer Station mehr als 6 Fahrgäste (Umsteigestation: 12), füllt sich ein Kreis-Timer. Ist er voll, ist das Spiel vorbei. Sinkt die Zahl wieder, läuft der Timer langsam zurück.
-- **Tageszeit:** Morgens und abends ist Stoßzeit, nachts ist es ruhiger und die Karte wird dunkler. Das kleine Illimani-Symbol neben der Uhr färbt sich mit der Tageszeit.
-- **Wochen:** Zu Beginn jeder Woche gibt es eine neue Gondel und du wählst **eine von zwei Belohnungen**: *Neue Linie* (bis zu 10 Farben), *Gondel*, *2 Masten*, *Hoher Mast*, *Große Kabine* oder *Umsteigestation*.
-- **Wachsende Stadt:** Die Runde beginnt in einem kleinen Ausschnitt rund um das Startgebiet. Woche für Woche wächst der bespielbare Bereich, die Kamera zoomt mit heraus. Eine typische Runde dauert 5–15 Minuten.
+- **Stations** appear one by one as shapes: circle, triangle, square – later also rare shapes (diamond, star, cross). They are named after real neighbourhoods and tend to appear where the city is built up.
+- **Passengers** appear as small shapes next to the stations. Each wants to reach *any* station of their shape, picks the best route through the network on their own and changes lines if needed.
+- **Lines** are drawn from station to station. Cable cars only run on **straight cable sections** – the direction changes only at stations.
+- **Gondolas** shuttle automatically between the end stations of a line. Each cabin holds 6 passengers (large cabin: 10).
+- **Overcrowding:** If more than 6 passengers wait at a station (interchange: 12), a circular timer fills up. When it is full, the game is over. If the number drops again, the timer slowly runs back.
+- **Time of day:** Mornings and evenings are rush hour; at night it is quieter and the map gets darker. The small Illimani icon next to the clock changes colour with the time of day.
+- **Weeks:** At the start of each week you get a new gondola and choose **one of two rewards**: *New line* (up to 10 colours), *Gondola*, *2 towers*, *Tall tower*, *Large cabin* or *Interchange*.
+- **Growing city:** A round starts in a small area around the start location. Week by week the playable area grows and the camera zooms out with it. A typical round lasts 5–15 minutes.
 
-### Gelände
+### Terrain
 
-Die Karte ist ca. 25 × 20 km groß (Norden oben) und aus Kontrollpunkten in `src/data/terrain.js` berechnet: Höhenbänder in flachen Farben, feine Höhenlinien, die gestrichelte Abbruchkante der Ceja, Flüsse und Schluchten in Blau sowie kleine Ortsnamen.
+The map is about 25 × 20 km (north up) and is computed from control points in `src/data/terrain.js`: elevation bands in flat colours, fine contour lines, the dashed escarpment of the Ceja, rivers and gorges in blue, and small place names.
 
-- **Masten** werden beim Bauen automatisch gesetzt und kommen aus deinem Vorrat. Gebraucht werden sie
-  - für Spannweiten über 2,3 km,
-  - über jeder **Schlucht**, die mindestens 35 m tief ist (Choqueyapu, Orkojahuira, Irpavi, Achocalla und viele Seitenquebradas),
-  - an **steilen Kanten** wie der Ceja (mehr als 70 m Höhenunterschied auf 240 m),
-  - wo ein Bergrücken das Seil berühren würde (das Seil hängt zwischen 18 m hohen Stationstürmen und 30 m hohen Masten und braucht 12 m Bodenabstand).
-  Reicht der Vorrat nicht, wird die Vorschau rot gestrichelt. Baust du eine Strecke ab, bekommst du ihre Masten zurück.
-- **Höhe:** Gondeln fahren bergauf Richtung El Alto langsamer und bergab etwas schneller.
-- **Bauplätze:** Stationen entstehen nur auf bebaubarem Gelände – nicht in Schluchten und Flüssen und nicht an Hängen steiler als etwa 19 %.
+- **Towers** (masts) are placed automatically when you build and come from your supply. They are needed
+  - for spans longer than 2.3 km,
+  - across every **gorge** at least 35 m deep (Choqueyapu, Orkojahuira, Irpavi, Achocalla and many side quebradas),
+  - on **steep edges** such as the Ceja (more than 70 m height difference over 240 m),
+  - where a ridge would touch the cable (the cable hangs between 18 m high station towers and 30 m high line towers and needs 12 m of ground clearance).
+  If your supply is not enough, the preview turns into a red dashed line. When you remove a section, you get its towers back.
+- **Altitude:** Gondolas are slower going uphill towards El Alto and a little faster going downhill.
+- **Building sites:** Stations only appear on buildable ground – not in gorges or rivers and not on slopes steeper than about 19 %.
 
-### Gebäude
+### Buildings
 
-Die Bebauung wird aus dem Seed erzeugt und folgt den Stadtgebieten (Schachbrett in El Alto, Hangsiedlungen am Kessel, Gartenstadt in der Zona Sur):
+The built-up area is generated from the seed and follows the urban areas (grid pattern in El Alto, hillside settlements around the basin, garden suburbs in the Zona Sur):
 
-- **Überbaubar** (hellgrau): Wohnhäuser, Märkte, Plätze, Felder. Seile dürfen darüber hinweg.
-- **Blockierend** (dunkel, mit Symbol): Hochhäuser im Zentrum und in der Zona Sur, Stadien, Spitäler mit Hubschrauberlandeplatz, Kasernen sowie der **Flughafen El Alto samt Anflugschneise**.
+- **Can be spanned** (light grey): houses, markets, squares, fields. Cables may pass over them.
+- **Blocking** (dark, with a symbol): high-rises in the centre and in the Zona Sur, stadiums, hospitals with helipads, barracks, and **El Alto Airport including its approach path**.
 
-Beim Ziehen prüft das Spiel jede Seilstrecke sofort: Ungültige Strecken werden rot gestrichelt, lassen sich nicht bauen, und ein kurzer Hinweis nennt den Grund (z. B. „Flughafen-Sperrzone: kein Seil über Flughafen und Einflugschneise.“, „Hier braucht das Seil 1 hohen Mast über Gebäude – frei: 0.“ oder „Zu wenig Masten: …“). Mit der Belohnung **Hoher Mast** darf ein Seil ein *einzelnes* Hochhaus, Stadion, Spital oder eine Kaserne überspannen – der Flughafen bleibt tabu. Hohe Masten erscheinen größer und mit rot-weißer Spitze; normale Masten werden automatisch neben blockierende Gebäude gesetzt. Fährst du mit der Maus über ein Gebäude (Touch: kurz antippen), zeigt ein Tooltip, was es ist.
+While you drag, the game checks every cable section immediately: invalid sections turn red and dashed, cannot be built, and a short notice gives the reason (e.g. “Airport exclusion zone: no cable over the airport or its approach path.”, “The cable needs 1 tall tower over buildings here – available: 0.” or “Not enough towers: …”). With the **Tall tower** reward a cable may span a *single* high-rise, stadium, hospital or barracks – the airport stays off-limits. Tall towers are drawn larger, with a red-and-white top; regular towers are automatically placed next to blocking buildings. Hover over a building with the mouse (touch: tap it briefly) to see what it is.
 
-### Seeds und Startgebiete
+### Seeds and start areas
 
-Jede Runde beginnt in einem zufälligen Startgebiet – Zentrum, El Alto, Zona Sur, Achocalla, Ovejuyo, Villa Fátima oder Ciudad Satélite – mit drei Startstationen. Alles Zufällige (Startgebiet, Gebäude, Startstationen, Spielverlauf) hängt an einem **Seed** und einem eigenen Zufallsgenerator: **gleicher Seed = gleiche Karte und gleicher Start.**
+Every round starts in a random start area – City centre, El Alto, Zona Sur, Achocalla, Ovejuyo, Villa Fátima or Ciudad Satélite – with three start stations. Everything random (start area, buildings, start stations, the course of the game) depends on a **seed** and the game's own random number generator: **same seed = same map and same start.**
 
-- Der Seed steht im Startbildschirm, im Menü und auf dem Game-Over-Bildschirm.
-- Im Startbildschirm kannst du einen eigenen Seed eingeben (Buchstaben und Ziffern, bis 12 Zeichen) oder mit dem Würfel einen neuen erzeugen.
-- „Gleicher Seed“ bzw. „Neu starten (gleicher Seed)“ spielt dieselbe Karte noch einmal.
+- The seed is shown on the start screen, in the menu and on the game-over screen.
+- On the start screen you can enter your own seed (letters and digits, up to 12 characters) or roll a new one with the dice.
+- “Same seed” and “Restart (same seed)” play the same map again.
 
-## Steuerung
+## Language
 
-| Aktion | Maus / Touch |
+The game is available in **German, English and Spanish**. Choose the language at the top right of the start screen or in the pause menu (**DE · EN · ES**). It applies immediately – even in the middle of a round and in open dialogs – and is remembered in the browser. On first launch the game follows the browser language (otherwise English).
+
+- Place, station and river names are Spanish proper names and stay the same in every language.
+- On errors, the server also returns an error code (`code`, plus `params` where needed); the game uses it to show the message in the selected language.
+- All texts live in `src/lang/de.js`, `en.js` and `es.js`. A test checks that all three have the same keys and placeholders and that every key used in the code exists. Adding another language only needs a new dictionary and an entry in `LANGS` (`src/i18n.js`).
+
+## Controls
+
+| Action | Mouse / touch |
 | --- | --- |
-| Neue Linie bauen | Von einer Station aus über weitere Stationen ziehen. Zurück über die letzte Station nimmt sie wieder heraus. |
-| Linie verlängern | Am **T-Ende** einer Linie greifen und zu neuen Stationen ziehen |
-| Linie kürzen | Am T-Ende greifen und über die vorletzte Station zurückziehen (bis zu einer Station = Linie löschen) |
-| Strecke umleiten | Ein Seilstück in der Mitte greifen und auf eine oder mehrere Stationen ziehen – sie werden dazwischen eingefügt |
-| Station abhängen | Ein Seilstück greifen und über eine seiner Endstationen hinweg auf die nächste Station der Linie ziehen |
-| Linie auswählen | Auf ein Seilstück oder den Farbpunkt unten tippen |
-| Linie löschen | Linie auswählen, dann **Löschen** (oder `Entf`). Die Gondeln lassen an der nächsten Station alle aussteigen und kehren ins Depot zurück. |
-| Gondel einsetzen | Gondel-Symbol aus der unteren Leiste auf eine Linie ziehen |
-| Gondel versetzen / entfernen | Gondel greifen und auf eine andere Linie ziehen – oder irgendwo ablegen (zurück ins Depot) |
-| Große Kabine / Umsteigestation | Symbol aus der Leiste auf eine Gondel bzw. Station ziehen |
-| Stationsinfo | Mit der Maus über eine Station fahren oder kurz antippen (Name, Höhe, Wartende) |
-| **Karte verschieben** | Rechte (oder mittlere) Maustaste gedrückt halten und ziehen · Touch: mit zwei Fingern ziehen |
-| **Zoomen** | Mausrad bzw. Touchpad · Touch: mit zwei Fingern auseinander-/zusammenziehen |
-| Ansicht zentrieren | Knopf oben rechts (erscheint nach dem Verschieben) oder `C` |
+| Build a new line | Drag from a station across further stations. Dragging back over the last station removes it again. |
+| Extend a line | Grab the **T-shaped end** of a line and drag to new stations |
+| Shorten a line | Grab the T-shaped end and drag back over the second-to-last station (down to one station = delete the line) |
+| Reroute a section | Grab a cable section in the middle and drag it onto one or more stations – they are inserted in between |
+| Unhook a station | Grab a cable section and drag it past one of its end stations onto the next station of the line |
+| Select a line | Tap a cable section or the colour dot at the bottom |
+| Delete a line | Select the line, then **Delete** (or `Del`). The gondolas let everyone off at the next station and return to the depot. |
+| Add a gondola | Drag the gondola icon from the bottom bar onto a line |
+| Move / remove a gondola | Grab a gondola and drag it onto another line – or drop it anywhere (back to the depot) |
+| Large cabin / interchange | Drag the icon from the bar onto a gondola or a station |
+| Station info | Hover over a station with the mouse or tap it briefly (name, altitude, waiting passengers) |
+| **Pan the map** | Hold the right (or middle) mouse button and drag · touch: drag with two fingers |
+| **Zoom** | Mouse wheel or touchpad · touch: pinch with two fingers |
+| Recenter the view | Button at the top right (appears after panning) or `C` |
 
-Solange du die Kamera nicht selbst bewegst, folgt sie automatisch der wachsenden Stadt. Nach dem Verschieben oder Zoomen bleibt sie, wo du sie hingestellt hast, bis du die Ansicht zentrierst.
+As long as you don't move the camera yourself, it automatically follows the growing city. After panning or zooming it stays where you put it until you recenter the view.
 
-| Taste | Funktion |
+| Key | Function |
 | --- | --- |
-| `Leertaste` | Pause / weiter (Bauen ist auch in der Pause möglich) |
-| `1` / `2` | Spielgeschwindigkeit 1× / 2× – im Belohnungsdialog: Belohnung wählen |
-| `+` / `-` | Hinein- / herauszoomen |
-| `C` / `Pos1` | Ansicht auf die Stadt zentrieren |
-| `Entf` / `Backspace` | Ausgewählte Linie löschen |
-| `M` | Ton an/aus |
-| `Esc` | Ziehen abbrechen, Auswahl aufheben, Dialog schließen bzw. Menü öffnen |
-| `Enter` | Im Start- und Game-Over-Bildschirm: Runde starten |
+| `Space` | Pause / resume (you can also build while paused) |
+| `1` / `2` | Game speed 1× / 2× – in the reward dialog: choose a reward |
+| `+` / `-` | Zoom in / out |
+| `C` / `Home` | Recenter the view on the city |
+| `Del` / `Backspace` | Delete the selected line |
+| `M` | Sound on/off |
+| `Esc` | Cancel dragging, clear the selection, close a dialog or open the menu |
+| `Enter` | On the start and game-over screens: start a round |
 
-## Speichern
+## Saving
 
-- Der vollständige Spielzustand wird gespeichert: Seed, Zeit und Woche, Stationen mit Wartenden und Timern, Linien, Gondeln mitsamt Fahrgästen und Position, Masten, Vorrat, Punktestand, Zufallsgenerator und Kamera. Ein geladener Stand läuft danach exakt so weiter, wie er gespeichert wurde.
-- **Automatisch** alle 30 Sekunden Spielzeit sowie beim Verlassen oder Verstecken der Seite. Im Startbildschirm setzt **Weiterspielen** die letzte Runde fort. Endet eine Runde, wird ihr automatischer Stand gelöscht bzw. im Konto als beendet markiert – so bietet sie auch kein anderes Gerät mehr an. Ein nur geladener, unveränderter Stand überschreibt den automatischen Stand nicht.
-- **Manuell** über *Menü → Spiel speichern* in einen von drei Speicherplätzen. *Spielstände* (Start- und Menübildschirm) zeigt alle Plätze mit Vorschau (Datum, Woche, Punkte, Startgebiet, Seed) zum Laden oder Löschen. Ein geladener Stand beginnt pausiert.
-- Lokal liegen die Stände in der **IndexedDB** des Browsers – getrennt nach Gast und Konto, sodass nach dem Abmelden oder auf einem geteilten Rechner niemand die Stände eines anderen Kontos sieht. Ist kein Speicher verfügbar (z. B. privater Modus), läuft das Spiel trotzdem – die Stände leben dann nur bis zum Neuladen.
-- Jeder Stand trägt eine Versionsnummer (`SAVE_VERSION` in `src/save.js`). Beim Laden läuft er durch `migrate()` – dort werden künftige Formatänderungen nachgezogen; Stände aus einer neueren Spielversion werden abgelehnt.
+- The complete game state is saved: seed, time and week, stations with waiting passengers and timers, lines, gondolas including their passengers and position, towers, supplies, score, random number generator and camera. A loaded game then continues exactly as it was saved.
+- **Automatically** every 30 seconds of play and when you leave or hide the page. On the start screen, **Continue** resumes the last round. When a round ends, its autosave is deleted or, in your account, marked as finished – so no other device offers it any more either. A game that was only loaded and not changed does not overwrite the autosave.
+- **Manually** via *Menu → Save game* into one of three slots. *Saved games* (start screen and menu) lists all slots with a preview (date, week, score, start area, seed) for loading or deleting. A loaded game starts paused.
+- Locally, saves are stored in the browser's **IndexedDB** – separately for the guest and each account, so that after logging out or on a shared computer nobody sees another account's saves. If no storage is available (e.g. private browsing), the game still runs – saves then only last until the page is reloaded.
+- Every save carries a version number (`SAVE_VERSION` in `src/save.js`). When loading, it goes through `migrate()`, where future format changes are handled; saves from a newer version of the game are rejected.
 
-## Konten
+## Accounts
 
-Nur verfügbar, wenn das Spiel über den mitgelieferten Server läuft. Ohne Anmeldung bleibt alles als **Gast** spielbar (nur lokale Spielstände).
+Only available when the game runs on the included server. Without logging in, everything stays playable as a **guest** (local saves only).
 
-- **Registrieren / Anmelden** im Startbildschirm unter *Anmelden*. Benutzername 3–24 Zeichen (Buchstaben, Ziffern, `_ . -`), Passwort mindestens 8 Zeichen. Der angemeldete Name steht klein in der Ecke.
-- Angemeldet wird jeder Spielstand zusätzlich im **Konto** gespeichert (eigene Konto-Plätze in der Spielstand-Liste) und lässt sich so in einem anderen Browser oder auf einem anderen Gerät laden.
-- Nach der Anmeldung bietet das Spiel an, **lokale Gast-Spielstände ins Konto zu übernehmen**. Belegte Konto-Plätze werden dabei nicht überschrieben, sondern als „Übernommen N“ abgelegt.
-- Am Rundenende wird die Punktzahl eingetragen: **Bestenliste** mit den besten Spielern und deinen persönlichen Bestwerten. Der lokale Highscore im Browser bleibt zusätzlich erhalten. Der Server prüft Ergebnisse auf Plausibilität (bekanntes Startgebiet, gültiger Seed, Woche passend zur Spielzeit, nicht mehr Fahrgäste, als in dieser Zeit entstehen können); nachspielen kann er eine Runde aber nicht.
-- Läuft die Anmeldung ab (oder wurde in einem anderen Tab abgemeldet), meldet das Spiel das und speichert bis zur erneuten Anmeldung nur lokal.
-- Sicherheit: Passwörter werden mit bcrypt gehasht, die Sitzung läuft über ein `HttpOnly`-Cookie (`SameSite=Lax`, 30 Tage), Eingaben werden geprüft, Fehlversuche beim Anmelden sind pro IP und Benutzer begrenzt (erfolgreiche Anmeldungen zählen nicht, damit sich z. B. eine Schulklasse hinter einer Adresse nicht aussperrt), neue Konten pro IP und Stunde ebenso. Ändernde Anfragen von fremden Seiten werden abgelehnt. Ein Spielstand darf höchstens 256 KB groß sein, alle Stände eines Kontos zusammen 2 MB (echte Stände: 10–60 KB).
+- **Register / log in** on the start screen under *Log in*. Username 3–24 characters (letters, digits, `_ . -`), password at least 8 characters. The logged-in name is shown small in the corner.
+- When logged in, every save is also stored in your **account** (separate account slots in the saved games list) and can be loaded in another browser or on another device.
+- After logging in, the game offers to **copy local guest saves to your account**. Occupied account slots are not overwritten; such saves are stored as “Imported N” instead.
+- At the end of a round your score is submitted: the **leaderboard** shows the best players and your personal bests. The local high score in the browser is kept as well. The server checks results for plausibility (known start area, valid seed, week matching the time played, no more passengers than can appear in that time); it cannot replay a round, though.
+- If your login expires (or you logged out in another tab), the game tells you and only saves locally until you log in again.
+- Security: passwords are hashed with bcrypt, the session uses an `HttpOnly` cookie (`SameSite=Lax`, 30 days), input is validated, failed login attempts are limited per IP and per user (successful logins don't count, so that e.g. a school class behind one address doesn't lock itself out), and so are new accounts per IP and hour. Write requests from other sites are rejected. A save may be at most 256 KB, all saves of one account together 2 MB (real saves: 10–60 KB).
 
 ### API
 
-| Methode | Pfad | Zweck |
+| Method | Path | Purpose |
 | --- | --- | --- |
-| `POST` | `/api/auth/register`, `/api/auth/login`, `/api/auth/logout` | Konto anlegen, anmelden, abmelden |
-| `GET` | `/api/auth/me` | Angemeldeter Benutzer |
-| `GET` | `/api/saves` | Liste der Spielstände (nur Vorschau) |
-| `GET` / `PUT` / `DELETE` | `/api/saves/:slot` | Spielstand laden / speichern / löschen |
-| `POST` | `/api/scores` | Punktzahl eintragen |
-| `GET` | `/api/scores/me`, `/api/leaderboard` | Persönliche Bestwerte, globale Bestenliste |
+| `POST` | `/api/auth/register`, `/api/auth/login`, `/api/auth/logout` | Create an account, log in, log out |
+| `GET` | `/api/auth/me` | Logged-in user |
+| `GET` | `/api/saves` | List of saves (preview only) |
+| `GET` / `PUT` / `DELETE` | `/api/saves/:slot` | Load / store / delete a save |
+| `POST` | `/api/scores` | Submit a score |
+| `GET` | `/api/scores/me`, `/api/leaderboard` | Personal bests, global leaderboard |
 
-## Projektstruktur
+Error responses look like `{ "error": "<German text>", "code": "loginFailed", "params": { … } }`; clients should use `code` to display the message.
+
+## Project structure
 
 ```
-index.html            Seitengerüst, HUD, Bildschirme und Dialoge
-style.css             Gestaltung der Oberfläche (responsiv)
+index.html            Page skeleton, HUD, screens and dialogs
+style.css             UI styling (responsive)
 src/
-  main.js             Einstieg, Spielschleife, Verdrahtung, Autosave, Menüs, Konten
-  game.js             Spielzustand und Regeln: Zeit/Wochen, Startgebiet, Spawning, Netz, Ressourcen, Game Over
-  data/terrain.js     Geländedaten: Plateau, Ceja, Flüsse, Bergrücken, Stadtgebiete, Orte, Startgebiete, Wahrzeichen
-  terrain.js          Höhenmodell aus den Geländedaten, Schluchten, Höhenlinien
-  map.js              Karte: Zeichnen, Bauplätze, Ortsnamen, Mastbedarf aus dem Geländeprofil
-  buildings.js        Prozedurale Bebauung, blockierende Gebäude, Prüfung der Seilstrecken
-  station.js          Stationen, Formen, wartende Fahrgäste, Überfüllungs-Timer
-  line.js             Linien, parallele Versätze, T-Enden, Masten
-  gondola.js          Gondeln: Fahrt mit Beschleunigung, Pendeln am Seil, Ein-/Aus-/Umsteigen
-  passenger.js        Fahrgäste und Routing (Dijkstra über Station×Linie mit Umsteigekosten)
-  render.js           Kamera (Folgen, Verschieben, Zoom) und Zeichnen; Hintergrund in Kacheln zwischengespeichert
-  input.js            Maus- und Touch-Bedienung inkl. Pinch-Zoom und Kamerasteuerung
-  ui.js               DOM-Oberfläche: HUD, Leiste, Belohnungen, Spielstände, Konto, Bestenliste
-  save.js             Spielstand serialisieren, laden und migrieren
-  storage.js          Lokale Spielstände in IndexedDB (mit Ersatz im Arbeitsspeicher)
-  persist.js          Speicherplätze lokal und im Konto, Übernahme von Gast-Ständen
-  api.js              Client für die Server-API
-  audio.js            Prozedurale Klänge über die Web Audio API
-  autoplay.js         Einfacher Bot für den Startbildschirm und die Simulation
-  config.js           Spielkonstanten, Linienfarben, Formen
-  util.js             Mathe, Geometrie, Seeds und Zufallsgenerator, Speicher-Helfer
+  main.js             Entry point, game loop, wiring, autosave, menus, accounts
+  game.js             Game state and rules: time/weeks, start area, spawning, network, supplies, game over
+  data/terrain.js     Terrain data: plateau, Ceja, rivers, ridges, urban areas, places, start areas, landmarks
+  terrain.js          Elevation model from the terrain data, gorges, contour lines
+  map.js              Map: drawing, building sites, place names, tower requirements from the terrain profile
+  buildings.js        Procedural buildings, blocking buildings, checking cable sections
+  station.js          Stations, shapes, waiting passengers, overcrowding timer
+  line.js             Lines, parallel offsets, T-shaped ends, towers
+  gondola.js          Gondolas: acceleration, swinging on the cable, boarding/alighting/transfers
+  passenger.js        Passengers and routing (Dijkstra over station × line with transfer costs)
+  render.js           Camera (follow, pan, zoom) and drawing; background cached in tiles
+  input.js            Mouse and touch input incl. pinch zoom and camera control
+  ui.js               DOM UI: HUD, bar, rewards, saved games, account, leaderboard, language switch
+  i18n.js             Language selection, translation function t(), names (colours, shapes, days, start areas)
+  lang/               Dictionaries: de.js (source language), en.js, es.js
+  save.js             Serialize, load and migrate saved games
+  storage.js          Local saves in IndexedDB (with in-memory fallback)
+  persist.js          Save slots locally and in the account, importing guest saves
+  api.js              Client for the server API
+  audio.js            Procedural sounds via the Web Audio API
+  autoplay.js         Simple bot for the start screen and the simulation
+  config.js           Game constants, line colours, shapes
+  util.js             Maths, geometry, seeds and random number generator, storage helpers
 server/
-  index.js            Startpunkt (npm start), Umgebungsvariablen
-  app.js              Express-App: API, Validierung, Auslieferung des Frontends
-  db.js               SQLite-Schema (Benutzer, Sitzungen, Spielstände, Punkte)
-  session.js          Sitzungs-Token und Cookies
-  ratelimit.js        Einfaches Rate-Limiting
-  config.js           Auswertung von TRUST_PROXY und PUBLIC_ORIGIN
-  plausible.js        Plausibilitätsprüfung für Bestenlisten-Einträge
-tests/                Node-Tests (npm test)
+  index.js            Entry point (npm start), environment variables
+  app.js              Express app: API, validation, serving the frontend
+  db.js               SQLite schema (users, sessions, saves, scores)
+  session.js          Session tokens and cookies
+  ratelimit.js        Simple rate limiting
+  config.js           Parsing TRUST_PROXY and PUBLIC_ORIGIN
+  plausible.js        Plausibility check for leaderboard entries
+tests/                Node tests (npm test)
 tools/
-  simulate.mjs        Balancing: lässt den Bot mehrere Runden headless spielen
-  stress.mjs          Stresstest mit zufälligen Netzänderungen und Invarianten-Prüfung
+  simulate.mjs        Balancing: lets the bot play several rounds headless
+  stress.mjs          Stress test with random network changes and invariant checks
 ```
 
-Die Spiellogik (`game.js` und abhängige Module) kommt ohne DOM aus und läuft deshalb auch in Node.js:
+The game logic (`game.js` and the modules it depends on) needs no DOM and therefore also runs in Node.js:
 
 ```bash
-node tools/simulate.mjs 12   # 12 Bot-Runden, zeigt Dauer, Woche und Punkte
-node tools/stress.mjs 30     # 30 Runden mit zufälligen Umbauten während des Betriebs
+node tools/simulate.mjs 12   # 12 bot rounds, shows duration, week and score
+node tools/stress.mjs 30     # 30 rounds with random rebuilding while running
 ```
 
-In der Browser-Konsole ist der laufende Spielzustand unter `window.__teleferico.game` erreichbar.
+In the browser console, the running game state is available as `window.__teleferico.game`.
 
-## Hinweise
+## Notes
 
-Teleférico ist ein eigenständiges Spiel mit eigenem Namen, eigener Grafik und eigenem Code. Das Spielprinzip ist von Liniennetz-Spielen inspiriert; es werden keine Assets, Texte oder Logos von *Mini Metro* oder vom Betreiber des realen Seilbahnnetzes in La Paz verwendet. Stations- und Ortsnamen sind Namen realer Stadtteile von La Paz und El Alto.
+Teleférico is an independent game with its own name, its own graphics and its own code. The gameplay is inspired by line-network games; no assets, texts or logos from *Mini Metro* or from the operator of the real cable car network in La Paz are used. Station and place names are names of real neighbourhoods of La Paz and El Alto.
 
-Die Topografie ist von Hand aus öffentlich bekanntem Kartenwissen nachgebaut und stark vereinfacht. Ein Kartenausschnitt, der dabei als Referenz diente (`reference/la-paz-topo.png`), ist bewusst nicht Teil des Repositorys.
+The topography was rebuilt by hand from publicly known map knowledge and is heavily simplified. A map excerpt used as a reference (`reference/la-paz-topo.png`) is deliberately not part of the repository.
+
+Code comments and internal identifiers are in German.

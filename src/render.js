@@ -5,7 +5,7 @@ import { nightness } from './game.js';
 import { drawStation, drawWaiting, drawOvercrowd, tracePath } from './station.js';
 import { drawLine, drawHandles, drawLineMasts, drawPlanSupports, strokeLineStyle, tracePolyline } from './line.js';
 import { CABIN } from './gondola.js';
-import { KIND_NAMES } from './buildings.js';
+import { t, buildingName } from './i18n.js';
 
 const FONT = '"Avenir Next", "Segoe UI", "Helvetica Neue", Arial, sans-serif';
 
@@ -541,7 +541,7 @@ export class Renderer {
     const ctx = this.ctx;
     const p = this.camera.toScreen(st.x, st.y);
     const title = st.name;
-    const sub = `${st.elev} m · ${st.waiting.length}/${st.capacity} wartend${st.interchange ? ' · Umsteigestation' : ''}`;
+    const sub = t('tip.station', { elev: st.elev, waiting: st.waiting.length, cap: st.capacity }) + (st.interchange ? t('tip.interchange') : '');
     ctx.save();
     ctx.font = `700 12px ${FONT}`;
     const w1 = ctx.measureText(title).width;
@@ -570,9 +570,7 @@ export class Renderer {
 
   drawBuildingTip(b) {
     const p = this.camera.toScreen(b.cx, b.minY);
-    const name = b.kind === 'highrise' || b.kind === 'approach' ? KIND_NAMES[b.kind] : b.name;
-    const sub = b.tallOk ? 'Blockiert Seile – mit hohem Mast überspannbar' : 'Sperrzone – hier führt kein Seil hinüber';
-    this.drawTip(p.x, p.y - 10, name, sub);
+    this.drawTip(p.x, p.y - 10, buildingName(b), t(b.tallOk ? 'tip.tallOk' : 'tip.blocked'));
   }
 
   drawTip(x, y, title, sub) {

@@ -64,7 +64,7 @@ export const CONFIG = {
   start: { lines: 3, gondolas: 3, masts: 4, tallMasts: 0, cabins: 0, interchanges: 0 },
 };
 
-/** Linienfarben, angelehnt an die Farbnamen des realen Netzes. */
+/** Linienfarben, angelehnt an die Farbnamen des realen Netzes (name = interner Bezeichner; Anzeige: src/lang, „colors“). */
 export const LINE_COLORS = [
   { name: 'Rot', hex: '#E03A3E' },
   { name: 'Gelb', hex: '#F4B400', light: true },
@@ -81,15 +81,5 @@ export const LINE_COLORS = [
 export const SHAPES = ['circle', 'triangle', 'square', 'diamond', 'star', 'cross'];
 export const COMMON_SHAPES = ['circle', 'triangle', 'square'];
 export const RARE_SHAPES = ['diamond', 'star', 'cross'];
-export const SHAPE_NAMES = {
-  circle: 'Kreis',
-  triangle: 'Dreieck',
-  square: 'Quadrat',
-  diamond: 'Raute',
-  star: 'Stern',
-  cross: 'Kreuz',
-};
 
 export const INK = '#2A2A2E';
-export const DAY_NAMES = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
-export const DAY_NAMES_LONG = ['Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag', 'Sonntag'];

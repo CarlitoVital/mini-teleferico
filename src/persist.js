@@ -7,22 +7,17 @@ import { localSaves } from './storage.js';
 import { api, ApiError } from './api.js';
 import { serializeGame, saveMeta } from './save.js';
 import { storageGet, storageSet } from './util.js';
+import { t } from './i18n.js';
 
+// Anzeigenamen: slotLabel() in src/i18n.js
 export const SLOTS = [
-  { id: 'auto', label: 'Automatisch gespeichert', kind: 'auto' },
-  { id: 'slot-1', label: 'Speicherplatz 1', kind: 'slot' },
-  { id: 'slot-2', label: 'Speicherplatz 2', kind: 'slot' },
-  { id: 'slot-3', label: 'Speicherplatz 3', kind: 'slot' },
+  { id: 'auto', kind: 'auto' },
+  { id: 'slot-1', kind: 'slot' },
+  { id: 'slot-2', kind: 'slot' },
+  { id: 'slot-3', kind: 'slot' },
 ];
 
 const isSlot = (id) => SLOTS.some((s) => s.id === id);
-
-const labelFor = (id) => {
-  const s = SLOTS.find((x) => x.id === id);
-  if (s) return s.label;
-  const m = /^import-(\d+)$/.exec(id);
-  return m ? `Übernommen ${m[1]}` : id;
-};
 
 const userName = () => (api.user ? String(api.user.username).toLowerCase() : null);
 const prefixFor = (name) => (name ? `u:${name}:` : '');
@@ -171,7 +166,7 @@ export class Persistence {
         const byId = new Map(server.rows.map((r) => [r.slot, r]));
         for (const s of SLOTS) entries.push({ ...s, source: 'server', meta: visible(s, byId.get(s.id)?.meta) });
         for (const r of server.rows) {
-          if (!isSlot(r.slot)) entries.push({ id: r.slot, label: labelFor(r.slot), kind: 'import', source: 'server', meta: r.meta });
+          if (!isSlot(r.slot)) entries.push({ id: r.slot, kind: 'import', source: 'server', meta: r.meta });
         }
       }
     }
@@ -216,11 +211,11 @@ export class Persistence {
       } catch (err) {
         throw this.#check(err);
       }
-      if (!row) throw new Error('Spielstand nicht gefunden.');
+      if (!row) throw new Error(t('err.saveNotFound'));
       return row.data;
     }
     const row = await localSaves.get(entry.key || localKey(entry.id));
-    if (!row) throw new Error('Spielstand nicht gefunden.');
+    if (!row) throw new Error(t('err.saveNotFound'));
     return row.data;
   }
 

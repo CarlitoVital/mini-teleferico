@@ -1,7 +1,8 @@
 // DOM-Oberfläche: HUD, untere Leiste, Start-, Belohnungs-, Pause-, Game-Over-, Spielstand-,
 // Konto- und Bestenlisten-Dialoge. Reiner Controller – die Logik steckt in main.js.
-import { LINE_COLORS } from './config.js';
-import { REWARDS, nightness, rushFactor } from './game.js';
+import { CONFIG, LINE_COLORS } from './config.js';
+import { nightness, rushFactor } from './game.js';
+import { LANGS, getLang, setLang, onLangChange, applyStatic, t, colorName, dayShort, dayLong, areaName, slotLabel, formatDate } from './i18n.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -29,13 +30,6 @@ function formatTime(sec) {
 
 function esc(text) {
   return String(text).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
-}
-
-function formatDate(ts) {
-  if (!ts) return '';
-  const d = new Date(ts);
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 // Illimani-Farben über den Tag: [Stunde, Berg, Schnee]
@@ -141,18 +135,15 @@ export class UI {
       btn.addEventListener('pointerdown', (e) => {
         e.preventDefault();
         if (kind === 'masts') {
-          this.toast(
-            'Masten setzt das Spiel automatisch: bei langen Spannweiten, tiefen Schluchten, steilen Kanten wie der Ceja und wo das Seil sonst den Boden berühren würde.',
-            4500,
-          );
+          this.toast(t('res.mastsInfo'), 4500);
           return;
         }
         if (kind === 'tall') {
-          this.toast('Hohe Masten werden automatisch genutzt, wenn ein Seil ein einzelnes Hochhaus, Stadion, Spital oder eine Kaserne überspannt.', 4500);
+          this.toast(t('res.tallInfo'), 4500);
           return;
         }
         if (btn.classList.contains('empty')) {
-          this.toast(`Keine ${btn.dataset.label} verfügbar.`);
+          this.toast(t(`res.empty.${kind}`));
           return;
         }
         this.h.onItemDown(kind, e);
@@ -187,6 +178,44 @@ export class UI {
       const v = this.el.seed.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
       if (v !== this.el.seed.value) this.el.seed.value = v;
     });
+
+    // Sprachauswahl (Startbildschirm und Pausenmenü)
+    this.last = {};
+    for (const box of document.querySelectorAll('.lang-switch')) {
+      box.innerHTML = LANGS.map(
+        (l) => `<button type="button" class="lang-btn" data-lang="${l.id}" lang="${l.id}" title="${l.label}" aria-label="${l.label}">${l.short}</button>`,
+      ).join('');
+      box.addEventListener('click', (e) => {
+        const b = e.target.closest('.lang-btn');
+        if (b) setLang(b.dataset.lang);
+      });
+    }
+    onLangChange(() => this.refreshLang());
+    this.refreshLang(true);
+  }
+
+  /** Texte nach einem Sprachwechsel neu setzen – auch in gerade offenen Dialogen. */
+  refreshLang(initial = false) {
+    applyStatic();
+    for (const b of document.querySelectorAll('.lang-btn')) {
+      const on = b.dataset.lang === getLang();
+      b.classList.toggle('active', on);
+      b.setAttribute('aria-pressed', String(on));
+    }
+    this.sig = {};
+    if (initial) return;
+    const L = this.last;
+    if (!this.el.start.hidden) this.showStart(L.best);
+    if (!this.el.reward.hidden && L.reward) this.renderReward(...L.reward);
+    if (!this.el.over.hidden && L.over) this.renderGameOver(...L.over);
+    if (!this.el.saves.hidden && L.saves) this.showSaves(L.saves);
+    if (!this.el.account.hidden && L.account) this.renderAccount(L.account);
+    if (!this.el.board.hidden && L.board) this.showBoard(...L.board);
+    if (!this.el.menu.hidden && L.menu) this.showMenu(true, L.menu);
+    if (L.user !== undefined) this.setUser(L.user, L.available);
+    if (L.cont !== undefined) this.setContinue(L.cont);
+    this.setAuthMode(this.authMode, true);
+    if (this.h.onLangChange) this.h.onLangChange();
   }
 
   get modalOpen() {
@@ -209,15 +238,14 @@ export class UI {
 
   // ---------------------------------------------------------------- Bildschirme
   showStart(best) {
+    this.last.best = best;
     for (const k of ['over', 'menu', 'reward', 'saves', 'account', 'board']) this.el[k].hidden = true;
     this.el.start.hidden = false;
     this.el.hud.hidden = true;
     this.el.bar.hidden = true;
     this.el.paused.hidden = true;
     document.body.classList.add('at-start');
-    this.el.best.textContent = best
-      ? `Rekord: ${best.score} Fahrgäste · Woche ${best.week}`
-      : 'Noch kein Rekord – leg los!';
+    this.el.best.textContent = best ? t('start.best', { score: best.score, week: best.week }) : t('start.noBest');
   }
 
   showGame() {
@@ -228,38 +256,50 @@ export class UI {
     this.sig = {};
   }
 
-  showMenu(show, meta = '') {
+  /** meta: { seed, area } der laufenden Runde */
+  showMenu(show, meta = null) {
     this.el.menu.hidden = !show;
-    if (show) $('menu-meta').textContent = meta;
+    if (show) this.last.menu = meta;
+    if (show && meta) $('menu-meta').textContent = t('menu.meta', { seed: meta.seed, area: areaName(meta.area) });
   }
 
   /** Knopf „Weiterspielen“ im Hauptmenü (letzter Autosave). */
   setContinue(entry) {
+    this.last.cont = entry;
     const b = $('btn-continue');
     b.hidden = !entry;
-    if (entry) b.title = `${entry.meta.area} · Woche ${entry.meta.week} · ${entry.meta.score} Fahrgäste`;
+    if (entry) b.title = t('start.continueTitle', { area: areaName(entry.meta.area), week: entry.meta.week, score: entry.meta.score });
   }
 
   showReward(game, week, options, onChoose) {
     this.rewardChoices = { options, onChoose };
-    this.el.rewardWeek.textContent = `Woche ${week}`;
+    this.renderReward(game, week, options);
+    this.el.reward.hidden = false;
+    const first = this.el.rewardCards.querySelector('.card');
+    if (first) first.focus({ preventScroll: true });
+  }
+
+  renderReward(game, week, options) {
+    this.last.reward = [game, week, options];
+    this.el.rewardWeek.textContent = t('reward.week', { n: week });
     const nextColor = game.nextLineColor();
+    const params = {
+      color: colorName(LINE_COLORS.indexOf(nextColor)),
+      big: CONFIG.bigCabinCapacity,
+      normal: CONFIG.gondolaCapacity,
+      cap: CONFIG.interchangeCapacity,
+    };
     this.el.rewardCards.innerHTML = options
       .map((k, i) => {
-        const r = REWARDS[k];
         const icon = k === 'line' ? ICONS.line(nextColor.hex) : ICONS[k];
-        const text = k === 'line' ? `Linie ${nextColor.name} wird freigeschaltet.` : r.text;
         return `<button class="card" data-index="${i}" data-kind="${k}">
           <span class="card-icon">${icon}</span>
-          <span class="card-title">${r.title}</span>
-          <span class="card-text">${text}</span>
+          <span class="card-title">${esc(t(`reward.${k}.title`))}</span>
+          <span class="card-text">${esc(t(`reward.${k}.text`, params))}</span>
           <span class="card-key">${i + 1}</span>
         </button>`;
       })
       .join('');
-    this.el.reward.hidden = false;
-    const first = this.el.rewardCards.querySelector('.card');
-    if (first) first.focus({ preventScroll: true });
   }
 
   chooseReward(i) {
@@ -273,32 +313,40 @@ export class UI {
     onChoose(options[i]);
   }
 
-  showGameOver(sum, best, record, note = '') {
-    $('over-eyebrow').textContent = `Game Over · Woche ${sum.week}, ${sum.dayLong}`;
-    $('over-title').textContent = `${sum.station} ist überfüllt`;
-    $('over-score').textContent = sum.score;
-    $('over-record').hidden = !record;
-    const rows = [
-      ['Spielzeit', formatTime(sum.time)],
-      ['Stationen', sum.stations],
-      ['Linien', sum.lines],
-      ['Gondeln', sum.gondolas],
-      ['Umstiege', sum.transfers],
-      ['Masten', sum.masts],
-      ['Längste Linie', `${sum.longest} St.`],
-      ['Rekord', best ? `${best.score}` : `${sum.score}`],
-    ];
-    $('over-stats').innerHTML = rows.map(([k, v]) => `<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join('');
-    $('over-meta').textContent = `Seed ${sum.seed} · Start: ${sum.area}${note ? ` · ${note}` : ''}`;
+  showGameOver(sum, best, record) {
+    this.overNote = null;
+    this.renderGameOver(sum, best, record);
     this.el.paused.hidden = true;
     this.el.over.hidden = false;
     $('btn-again').focus({ preventScroll: true });
   }
 
-  setGameOverNote(text) {
-    const el = $('over-meta');
-    if (!el.dataset.base) el.dataset.base = el.textContent;
-    el.textContent = `${el.dataset.base} · ${text}`;
+  renderGameOver(sum, best, record) {
+    this.last.over = [sum, best, record];
+    $('over-eyebrow').textContent = t('over.eyebrow', { week: sum.week, day: dayLong(sum.day - 1) });
+    $('over-title').textContent = sum.station ? t('over.title', { station: sum.station }) : t('over.titleDefault');
+    $('over-score').textContent = sum.score;
+    $('over-record').hidden = !record;
+    const rows = [
+      ['over.stat.time', formatTime(sum.time)],
+      ['over.stat.stations', sum.stations],
+      ['over.stat.lines', sum.lines],
+      ['over.stat.gondolas', sum.gondolas],
+      ['over.stat.transfers', sum.transfers],
+      ['over.stat.masts', sum.masts],
+      ['over.stat.longest', t('over.stat.longestValue', { n: sum.longest })],
+      ['over.stat.best', best ? `${best.score}` : `${sum.score}`],
+    ];
+    $('over-stats').innerHTML = rows.map(([k, v]) => `<div><dt>${esc(t(k))}</dt><dd>${esc(v)}</dd></div>`).join('');
+    const meta = t('over.meta', { seed: sum.seed, area: areaName(sum.area) });
+    const note = this.overNote ? t(this.overNote.key, this.overNote.params) : '';
+    $('over-meta').textContent = note ? `${meta} · ${note}` : meta;
+  }
+
+  /** Zusatz unter dem Game-Over-Ergebnis (z. B. Bestenliste); wird bei Sprachwechsel mit übersetzt. */
+  setGameOverNote(key, params = {}) {
+    this.overNote = { key, params };
+    if (this.last.over) this.renderGameOver(...this.last.over);
   }
 
   // ---------------------------------------------------------------- Spielstände
@@ -306,33 +354,42 @@ export class UI {
    * entries: [{ id, label, kind: 'auto'|'slot', source: 'local'|'server', meta|null, empty }]
    * mode: 'load' | 'save'
    */
-  showSaves({ mode, entries, note = '', canImport = false }) {
+  /** note: { key, params } – wird bei Sprachwechsel mit übersetzt. */
+  showSaves({ mode, entries, note = null, canImport = false }) {
+    this.last.saves = { mode, entries, note, canImport };
     this.saveEntries = entries;
-    $('saves-title').textContent = mode === 'save' ? 'Speichern' : 'Laden';
+    $('saves-title').textContent = t(mode === 'save' ? 'saves.titleSave' : 'saves.titleLoad');
     $('saves-list').innerHTML = entries
       .map((e, i) => {
         const m = e.meta;
+        const label = slotLabel(e.id);
         const info = m
-          ? `<span class="save-main">Woche ${esc(m.week)} · ${esc(m.score)} Fahrgäste · ${esc(m.area)}</span>
-             <span class="save-sub">${esc(formatDate(m.savedAt))} · Seed ${esc(m.seed)}</span>`
-          : '<span class="save-main empty">leer</span>';
+          ? `<span class="save-main">${esc(t('saves.main', { week: m.week, score: m.score, area: areaName(m.area) }))}</span>
+             <span class="save-sub">${esc(t('saves.sub', { date: formatDate(m.savedAt), seed: m.seed }))}</span>`
+          : `<span class="save-main empty">${esc(t('saves.empty'))}</span>`;
         const src =
           e.source === 'server'
-            ? '<span class="tag server">Konto</span>'
+            ? `<span class="tag server">${esc(t('saves.tagServer'))}</span>`
             : e.source === 'both'
-              ? '<span class="tag server">Lokal + Konto</span>'
-              : '<span class="tag">Lokal</span>';
+              ? `<span class="tag server">${esc(t('saves.tagBoth'))}</span>`
+              : `<span class="tag">${esc(t('saves.tagLocal'))}</span>`;
         const actions = [];
-        if (mode === 'save' && e.kind === 'slot') actions.push(`<button class="btn small primary" data-action="save" data-index="${i}">${m ? 'Überschreiben' : 'Speichern'}</button>`);
-        if (mode === 'load' && m) actions.push(`<button class="btn small primary" data-action="load" data-index="${i}">Laden</button>`);
-        if (m) actions.push(`<button class="btn small ghost" data-action="delete" data-index="${i}" aria-label="${esc(e.label)} löschen">Löschen</button>`);
+        if (mode === 'save' && e.kind === 'slot') {
+          actions.push(`<button class="btn small primary" data-action="save" data-index="${i}">${esc(t(m ? 'saves.overwrite' : 'saves.save'))}</button>`);
+        }
+        if (mode === 'load' && m) actions.push(`<button class="btn small primary" data-action="load" data-index="${i}">${esc(t('saves.load'))}</button>`);
+        if (m) {
+          actions.push(
+            `<button class="btn small ghost" data-action="delete" data-index="${i}" aria-label="${esc(t('saves.deleteAria', { slot: label }))}">${esc(t('saves.delete'))}</button>`,
+          );
+        }
         return `<div class="save-row${m ? '' : ' is-empty'}">
-          <div class="save-info"><span class="save-label">${esc(e.label)} ${src}</span>${info}</div>
+          <div class="save-info"><span class="save-label">${esc(label)} ${src}</span>${info}</div>
           <div class="save-actions">${actions.join('')}</div>
         </div>`;
       })
       .join('');
-    $('saves-note').textContent = note;
+    $('saves-note').textContent = note ? t(note.key, note.params) : '';
     $('btn-import').hidden = !canImport;
     this.el.saves.hidden = false;
   }
@@ -342,17 +399,17 @@ export class UI {
   }
 
   // ---------------------------------------------------------------- Konto
-  setAuthMode(mode) {
+  setAuthMode(mode, keepError = false) {
     this.authMode = mode;
     for (const tab of document.querySelectorAll('#auth-form .tab')) {
       const on = tab.dataset.mode === mode;
       tab.classList.toggle('active', on);
       tab.setAttribute('aria-selected', String(on));
     }
-    $('auth-submit').textContent = mode === 'register' ? 'Konto anlegen' : 'Anmelden';
+    $('auth-submit').textContent = t(mode === 'register' ? 'account.submitRegister' : 'account.submitLogin');
     $('auth-pass').setAttribute('autocomplete', mode === 'register' ? 'new-password' : 'current-password');
     $('auth-hint').hidden = mode !== 'register';
-    this.setAuthError('');
+    if (!keepError) this.setAuthError('');
   }
 
   setAuthError(msg) {
@@ -364,16 +421,8 @@ export class UI {
   }
 
   showAccount({ available, user, scores = [] }) {
-    $('account-offline').hidden = available;
-    $('auth-form').hidden = !available || !!user;
-    $('account-info').hidden = !user;
-    $('account-title').textContent = user ? 'Dein Konto' : 'Anmelden';
-    if (user) {
-      $('account-name').textContent = user.username;
-      $('my-scores').innerHTML = scores.length
-        ? scores.map((s) => `<li><b>${esc(s.score)}</b> Fahrgäste · Woche ${esc(s.week)} · ${esc(s.area)} <span class="muted">${esc(formatDate(s.createdAt))}</span></li>`).join('')
-        : '<li class="muted">Noch keine Runden gespeichert.</li>';
-    } else {
+    this.renderAccount({ available, user, scores });
+    if (!user) {
       this.setAuthMode(this.authMode);
       $('auth-pass').value = '';
     }
@@ -381,16 +430,39 @@ export class UI {
     if (!user && available) setTimeout(() => $('auth-user').focus({ preventScroll: true }), 30);
   }
 
+  renderAccount({ available, user, scores = [] }) {
+    this.last.account = { available, user, scores };
+    $('account-offline').hidden = available;
+    $('auth-form').hidden = !available || !!user;
+    $('account-info').hidden = !user;
+    $('account-title').textContent = t(user ? 'account.titleUser' : 'account.titleLogin');
+    if (user) {
+      $('account-name').textContent = user.username;
+      $('my-scores').innerHTML = scores.length
+        ? scores
+            .map(
+              (s) =>
+                `<li><b>${esc(s.score)}</b> ${esc(t('scores.row', { week: s.week, area: areaName(s.area) }))} <span class="muted">${esc(formatDate(s.createdAt))}</span></li>`,
+            )
+            .join('')
+        : `<li class="muted">${esc(t('account.noScores'))}</li>`;
+    }
+  }
+
   hideAccount() {
     this.el.account.hidden = true;
   }
 
   showBoard(rows, me) {
+    this.last.board = [rows, me];
     $('board-list').innerHTML = rows.length
       ? rows
-          .map((r) => `<li class="${me && r.username === me.username ? 'me' : ''}"><b>${esc(r.score)}</b> ${esc(r.username)} <span class="muted">Woche ${esc(r.week)} · ${esc(r.area)}</span></li>`)
+          .map(
+            (r) =>
+              `<li class="${me && r.username === me.username ? 'me' : ''}"><b>${esc(r.score)}</b> ${esc(r.username)} <span class="muted">${esc(t('board.row', { week: r.week, area: areaName(r.area) }))}</span></li>`,
+          )
           .join('')
-      : '<li class="muted">Noch keine Einträge – spiel die erste Runde!</li>';
+      : `<li class="muted">${esc(t('board.empty'))}</li>`;
     this.el.board.hidden = false;
   }
 
@@ -400,9 +472,11 @@ export class UI {
 
   /** Angemeldeten Namen klein in der Ecke zeigen; Knöpfe im Hauptmenü anpassen. */
   setUser(user, available) {
+    this.last.user = user;
+    this.last.available = available;
     this.el.userChip.hidden = !user;
     this.el.userName.textContent = user ? user.username : '';
-    $('btn-account').textContent = user ? 'Konto' : 'Anmelden';
+    $('btn-account').textContent = t(user ? 'start.account' : 'start.login');
     $('btn-board').hidden = !available;
   }
 
@@ -426,14 +500,17 @@ export class UI {
     this.set('muted', state.muted, (m) => {
       el.sound.innerHTML = m ? ICONS.mute : ICONS.sound;
       el.sound.setAttribute('aria-pressed', String(m));
-      $('start-sound').textContent = m ? 'Ton: aus' : 'Ton: an';
+      $('start-sound').textContent = t(m ? 'start.soundOff' : 'start.soundOn');
     });
     if (!game || game.demo) return;
     this.set('score', game.score, (v) => (el.score.textContent = v));
-    this.set('clock', game.clockText(), (v) => (el.clockDay.textContent = v));
-    this.set('week', game.week, (v) => (el.clockWeek.textContent = `Woche ${v}`));
+    const h = Math.floor(game.hour);
+    const mm = Math.floor((game.hour - h) * 6) * 10;
+    const clock = `${dayShort(game.dayIndex)} ${String(h).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+    this.set('clock', clock, (v) => (el.clockDay.textContent = v));
+    this.set('week', game.week, (v) => (el.clockWeek.textContent = t('hud.week', { n: v })));
     this.set('meta', `${game.seed}|${game.startArea.name}`, () => {
-      el.hudMeta.textContent = `Seed ${game.seed} · ${game.startArea.name}`;
+      el.hudMeta.textContent = t('hud.meta', { seed: game.seed, area: areaName(game.startArea.name) });
     });
     const dayFrac = (game.totalHours % 24) / 24;
     el.clockArc.style.strokeDashoffset = String(87.96 * (1 - dayFrac));
@@ -448,7 +525,8 @@ export class UI {
     this.set('paused', state.paused && game.state === 'playing' && el.menu.hidden, (p) => (el.paused.hidden = !p));
     this.set('pauseBtn', state.paused, (p) => {
       el.pause.innerHTML = p ? ICONS.play : ICONS.pause;
-      el.pause.setAttribute('aria-label', p ? 'Weiter (Leertaste)' : 'Pause (Leertaste)');
+      el.pause.setAttribute('aria-label', t(p ? 'hud.resume' : 'hud.pause'));
+      el.pause.setAttribute('title', t(p ? 'hud.resume' : 'hud.pause'));
     });
     this.set('speed', state.speed, (s) => {
       el.speed.textContent = `${s}×`;
@@ -478,12 +556,14 @@ export class UI {
           if (sel && sel.slot === i) cls.push('selected');
           if (s === 'f' && i === pref) cls.push('next');
           if (c.light) cls.push('light');
-          const label =
+          const color = colorName(i);
+          const label = esc(
             s === 'f'
-              ? `Linie ${c.name} (frei)${i === pref ? ' – wird als Nächstes gebaut' : ''}`
+              ? t(i === pref ? 'dots.freeNext' : 'dots.free', { color })
               : s === 'c'
-                ? `Linie ${c.name} wird abgebaut`
-                : `Linie ${c.name} auswählen`;
+                ? t('dots.closing', { color })
+                : t('dots.select', { color }),
+          );
           return `<button class="${cls.join(' ')}" data-slot="${i}" style="--c:${c.hex}" title="${label}" aria-label="${label}"></button>`;
         })
         .join('');

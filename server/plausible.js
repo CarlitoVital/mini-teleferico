@@ -38,12 +38,14 @@ export function weekAt(time) {
   return Math.floor(totalHours / 24 / 7) + 1;
 }
 
-/** Fehlermeldung oder null, wenn das Ergebnis zu den Spielregeln passt. */
+/** { code, message } oder null, wenn das Ergebnis zu den Spielregeln passt. */
 export function implausible({ score, week, seed, area, time }) {
-  if (!AREA_NAMES.has(area)) return 'Unbekanntes Startgebiet.';
-  if (!SEED_RE.test(seed)) return 'Ungültiger Seed.';
+  if (!AREA_NAMES.has(area)) return { code: 'scoreArea', message: 'Unbekanntes Startgebiet.' };
+  if (!SEED_RE.test(seed)) return { code: 'scoreSeed', message: 'Ungültiger Seed.' };
   // Spielzeit wird gerundet übertragen – an einer Wochengrenze darf die Woche um eins abweichen
-  if (Math.abs(week - weekAt(time)) > 1) return 'Woche passt nicht zur Spielzeit.';
-  if (score > maxPlausibleScore(time)) return 'So viele Fahrgäste sind in dieser Spielzeit nicht möglich.';
+  if (Math.abs(week - weekAt(time)) > 1) return { code: 'scoreWeek', message: 'Woche passt nicht zur Spielzeit.' };
+  if (score > maxPlausibleScore(time)) {
+    return { code: 'scoreTooHigh', message: 'So viele Fahrgäste sind in dieser Spielzeit nicht möglich.' };
+  }
   return null;
 }
