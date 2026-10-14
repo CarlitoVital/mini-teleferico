@@ -2,38 +2,13 @@
 import { CONFIG, INK } from './config.js';
 import { TAU, clamp, easeOutBack } from './util.js';
 
-/** Stadtteilnamen je Höhenstufe (Index entspricht BANDS). */
-export const STATION_NAMES = [
-  [
-    'Ciudad Satélite', 'Villa Adela', 'Río Seco', 'Senkata', '16 de Julio', 'Villa Dolores',
-    'Ballivián', 'Villa Tunari', 'Alto Lima', 'Santiago II', 'Villa Ingenio', 'Mercedario',
-    'Ventilla', 'Kenko', 'Rosas Pampa', 'Villa Bolívar', 'Ciudad Real', 'Huayna Potosí',
-  ],
-  [
-    'Villa Fátima', 'Pura Pura', 'Munaypata', 'Achachicala', 'Pampahasi', 'Villa Armonía',
-    'Tembladerani', 'Llojeta', 'Chamoco Chico', 'Alto Sopocachi', 'Villa Victoria',
-    'Callampaya', 'Villa Copacabana', 'Kupini', 'Cotahuma', 'Bajo Llojeta', 'Vino Tinto',
-  ],
-  [
-    'Plaza Murillo', 'San Francisco', 'El Prado', 'San Pedro', 'Sopocachi', 'Miraflores',
-    'Max Paredes', 'Gran Poder', 'Rodríguez', 'Garita de Lima', 'Plaza Uyuni', 'Challapampa',
-    'Belén', 'San Jorge', 'Plaza Abaroa', 'Santa Bárbara', 'Plaza Avaroa', 'Tejar',
-  ],
-  [
-    'Obrajes', 'Calacoto', 'Irpavi', 'Achumani', 'Cota Cota', 'Mallasa', 'Los Pinos',
-    'San Miguel', 'Següencoma', 'Bolognia', 'Chasquipampa', 'Ovejuyo', 'Aranjuez',
-    'Alto Irpavi', 'Huajchilla', 'Auquisamaña', 'Koani', 'Seguencoma Alto',
-  ],
-];
-
 export class Station {
-  constructor({ id, x, y, shape, name, band, elev, born }) {
+  constructor({ id, x, y, shape, name, elev, born }) {
     this.id = id;
     this.x = x;
     this.y = y;
     this.shape = shape;
     this.name = name;
-    this.band = band;
     this.elev = elev;
     this.born = born;
     this.waiting = [];

@@ -1,11 +1,11 @@
 // Kamera und Zusammensetzen eines Frames auf dem Canvas.
 import { CONFIG, INK } from './config.js';
 import { TAU, clamp, rgba, roundRectPath } from './util.js';
-import { drawIllimani } from './map.js';
 import { nightness } from './game.js';
 import { drawStation, drawWaiting, drawOvercrowd, tracePath } from './station.js';
-import { drawLine, drawHandles, drawLineMasts, drawMast, strokeLineStyle, tracePolyline } from './line.js';
+import { drawLine, drawHandles, drawLineMasts, drawPlanSupports, strokeLineStyle, tracePolyline } from './line.js';
 import { CABIN } from './gondola.js';
+import { KIND_NAMES } from './buildings.js';
 
 const FONT = '"Avenir Next", "Segoe UI", "Helvetica Neue", Arial, sans-serif';
 
@@ -18,6 +18,10 @@ export class Camera {
     this.ty = 0;
     this.ts = 1;
     this.vp = { x: 0, y: 0, w: 1, h: 1 };
+    this.manual = false; // true, sobald der Spieler selbst schwenkt/zoomt
+    this.bounds = null; // Kartengrenzen {w, h}
+    this.minScale = 0.05;
+    this.maxScale = 4;
   }
 
   get cx() {
@@ -32,11 +36,23 @@ export class Camera {
     return Math.min(this.vp.w / rect.w, this.vp.h / rect.h);
   }
 
+  /** Kartengrenzen setzen: Herauszoomen bis knapp zur ganzen Karte, Hineinzoomen bis 4×. */
+  setBounds(w, h) {
+    this.bounds = { w, h };
+    this.minScale = Math.min(this.vp.w / w, this.vp.h / h) * 0.92;
+    this.maxScale = 4;
+  }
+
   fit(rect, immediate = false) {
     this.ts = this.fitScale(rect);
     this.tx = rect.x + rect.w / 2;
     this.ty = rect.y + rect.h / 2;
     if (immediate) this.snap();
+  }
+
+  /** Automatische Kamera: folgt dem Stadtbereich, solange nicht manuell gesteuert wird. */
+  follow(rect) {
+    if (!this.manual) this.fit(rect);
   }
 
   focus(x, y, s) {
@@ -49,6 +65,33 @@ export class Camera {
     this.x = this.tx;
     this.y = this.ty;
     this.scale = this.ts;
+  }
+
+  clampCenter() {
+    if (!this.bounds) return;
+    this.x = clamp(this.x, 0, this.bounds.w);
+    this.y = clamp(this.y, 0, this.bounds.h);
+    this.tx = this.x;
+    this.ty = this.y;
+    this.ts = this.scale;
+  }
+
+  /** Verschieben um Bildschirm-Pixel. */
+  panBy(dx, dy) {
+    this.manual = true;
+    this.x -= dx / this.scale;
+    this.y -= dy / this.scale;
+    this.clampCenter();
+  }
+
+  /** Zoomen um Faktor, wobei der Punkt unter (sx, sy) stehen bleibt. */
+  zoomAt(sx, sy, factor) {
+    this.manual = true;
+    const w = this.toWorld(sx, sy);
+    this.scale = clamp(this.scale * factor, this.minScale, this.maxScale);
+    this.x = w.x - (sx - this.cx) / this.scale;
+    this.y = w.y - (sy - this.cy) / this.scale;
+    this.clampCenter();
   }
 
   update(dt) {
@@ -70,6 +113,117 @@ export class Camera {
   }
 }
 
+const TILE_PX = 512;
+const MAX_TILES = 96;
+
+/**
+ * Kachel-Cache für die unveränderliche Kartenschicht (Gelände, Höhenlinien, Wasser, Gebäude).
+ * Kacheln werden je Zoomstufe passend aufgelöst, schrittweise mit Zeitbudget gerendert und
+ * pixelgenau aneinandergesetzt. Bis eine Kachel fertig ist, dient eine grobe Übersicht als Ersatz.
+ */
+class TileLayer {
+  constructor() {
+    this.map = null;
+    this.tiles = new Map();
+    this.overview = null;
+  }
+
+  reset(map) {
+    this.map = map;
+    this.tiles.clear();
+    this.overview = null;
+  }
+
+  /** Auflösung in Gerätepixeln pro Welt-Einheit: Zweierpotenz, höchstens ~1,6-fach vergrößert. */
+  levelFor(scale, dpr) {
+    const need = scale * dpr * 1.25;
+    let L = 0.25;
+    while (L * 2 <= need && L < 4) L *= 2;
+    return L;
+  }
+
+  ensureOverview() {
+    if (this.overview) return this.overview;
+    const L = 0.25;
+    const cv = document.createElement('canvas');
+    cv.width = Math.ceil(this.map.W * L);
+    cv.height = Math.ceil(this.map.H * L);
+    const c = cv.getContext('2d');
+    c.setTransform(L, 0, 0, L, 0, 0);
+    this.map.drawStatic(c, { x0: 0, y0: 0, x1: this.map.W, y1: this.map.H }, L);
+    this.overview = cv;
+    return cv;
+  }
+
+  renderTile(L, tx, ty) {
+    const u = TILE_PX / L;
+    const cv = document.createElement('canvas');
+    cv.width = TILE_PX;
+    cv.height = TILE_PX;
+    const c = cv.getContext('2d');
+    c.setTransform(L, 0, 0, L, -tx * u * L, -ty * u * L);
+    this.map.drawStatic(c, { x0: tx * u, y0: ty * u, x1: (tx + 1) * u, y1: (ty + 1) * u }, L);
+    return cv;
+  }
+
+  /**
+   * Zeichnet die sichtbaren Kacheln im Gerätepixel-Raum. Liefert true, wenn alles in voller
+   * Auflösung vorlag (sonst muss im nächsten Frame weitergezeichnet werden).
+   */
+  draw(ctx, cam, dpr, budgetMs) {
+    const map = this.map;
+    const s = cam.scale;
+    const L = this.levelFor(s, dpr);
+    const u = TILE_PX / L;
+    const a = cam.toWorld(0, 0);
+    const b = cam.toWorld(cam.vpFullW, cam.vpFullH);
+    const tx0 = Math.max(0, Math.floor(a.x / u));
+    const ty0 = Math.max(0, Math.floor(a.y / u));
+    const tx1 = Math.min(Math.ceil(map.W / u) - 1, Math.floor(b.x / u));
+    const ty1 = Math.min(Math.ceil(map.H / u) - 1, Math.floor(b.y / u));
+    const dev = (wx, wy) => ({ x: Math.round(((wx - cam.x) * s + cam.cx) * dpr), y: Math.round(((wy - cam.y) * s + cam.cy) * dpr) });
+    const start = performance.now();
+    let complete = true;
+    let rendered = 0;
+    // Kacheln nahe der Bildmitte zuerst
+    const order = [];
+    for (let ty = ty0; ty <= ty1; ty++) for (let tx = tx0; tx <= tx1; tx++) order.push([tx, ty]);
+    const mx = (tx0 + tx1) / 2;
+    const my = (ty0 + ty1) / 2;
+    order.sort((p, q) => Math.hypot(p[0] - mx, p[1] - my) - Math.hypot(q[0] - mx, q[1] - my));
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    for (const [tx, ty] of order) {
+      const key = `${L}:${tx}:${ty}`;
+      let tile = this.tiles.get(key);
+      if (tile) {
+        this.tiles.delete(key);
+        this.tiles.set(key, tile);
+      } else if (rendered === 0 || performance.now() - start < budgetMs) {
+        tile = this.renderTile(L, tx, ty);
+        rendered++;
+        this.tiles.set(key, tile);
+      }
+      const p0 = dev(tx * u, ty * u);
+      const p1 = dev((tx + 1) * u, (ty + 1) * u);
+      if (tile) {
+        ctx.drawImage(tile, p0.x, p0.y, p1.x - p0.x, p1.y - p0.y);
+      } else {
+        complete = false;
+        const ov = this.ensureOverview();
+        const k = ov.width / map.W;
+        const sw = Math.min(u, map.W - tx * u);
+        const sh = Math.min(u, map.H - ty * u);
+        ctx.drawImage(ov, tx * u * k, ty * u * k, sw * k, sh * k, p0.x, p0.y, ((p1.x - p0.x) * sw) / u, ((p1.y - p0.y) * sh) / u);
+      }
+    }
+    // Erst nach dem Frame aufräumen und nie eine gerade sichtbare Kachel verdrängen (die stehen
+    // in der LRU-Reihenfolge hinten) – auf sehr großen Bildschirmen wächst der Cache entsprechend mit
+    const limit = Math.max(MAX_TILES, order.length + 8);
+    while (this.tiles.size > limit) this.tiles.delete(this.tiles.keys().next().value);
+    return complete;
+  }
+}
+
 export class Renderer {
   constructor(canvas) {
     this.canvas = canvas;
@@ -82,7 +236,7 @@ export class Renderer {
     this.bg = document.createElement('canvas');
     this.bgCtx = this.bg.getContext('2d');
     this.bgKey = '';
-    this.bgMap = null;
+    this.tilesLayer = new TileLayer();
     this.resize();
   }
 
@@ -93,6 +247,8 @@ export class Renderer {
     this.canvas.width = Math.round(this.cssW * this.dpr);
     this.canvas.height = Math.round(this.cssH * this.dpr);
     this.camera.vp = this.mapViewport();
+    this.camera.vpFullW = this.cssW;
+    this.camera.vpFullH = this.cssH;
   }
 
   /** Bereich, in den die Karte eingepasst wird (ohne HUD oben und Leiste unten). */
@@ -104,16 +260,14 @@ export class Renderer {
     return { x: side, y: top, w: Math.max(50, this.cssW - side * 2), h: Math.max(50, this.cssH - top - bottom) };
   }
 
-  /** Weltgröße passend zum Bildschirm: Seitenverhältnis wie der Viewport, Endzoom 0.7–1.0. */
-  worldSize() {
+  /**
+   * Form und Größe des Startbereichs passend zum Bildschirm: gleiches Seitenverhältnis,
+   * Startzoom 1.1–1.65 Pixel pro Welt-Einheit.
+   */
+  startGeometry() {
     const vp = this.mapViewport();
-    const sFinal = clamp(Math.min(vp.w, vp.h) / 760, 0.7, 1.0);
-    const aspect = clamp(vp.w / vp.h, 0.55, 2.2);
-    let w = vp.w / sFinal;
-    let h = vp.h / sFinal;
-    if (w / h > aspect) w = h * aspect;
-    else h = w / aspect;
-    return { w: Math.round(w), h: Math.round(h) };
+    const s0 = clamp(Math.min(vp.w, vp.h) / 380, 1.1, 1.65);
+    return { aspect: clamp(vp.w / vp.h, 0.45, 2.4), area: (vp.w * vp.h) / (s0 * s0) };
   }
 
   worldTransform() {
@@ -172,21 +326,47 @@ export class Renderer {
     // --- Bildschirm-Overlays
     this.screenTransform();
     this.drawNewStationLabels(game);
+    if (!view.demo) this.drawOffscreenHints(game, realTime);
     if (hoverSt && !drag) this.drawStationTip(game, hoverSt);
+    else if (view.hoverBuilding && !drag) this.drawBuildingTip(view.hoverBuilding);
     if (game.state === 'over' && game.overStation) this.drawGameOverMarker(game, realTime);
     if (drag && drag.type === 'item') this.drawItemGhost(game, drag);
+    if (drag && drag.floatReason && drag.screen) this.drawReason(drag.floatReason, drag.screen);
   }
 
-  /** Zeichnet Gelände, Kulisse, Schluchten und Nacht-Tönung – nur wenn sich die Ansicht ändert. */
+  /** Kurzer Grund am Zeiger, warum ein Seilstück nicht gebaut werden kann. */
+  drawReason(text, at) {
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.font = `600 12px ${FONT}`;
+    const w = ctx.measureText(text).width + 18;
+    const h = 26;
+    const x = clamp(at.x + 16, 6, this.cssW - w - 6);
+    const y = clamp(at.y - h - 14, 6, this.cssH - h - 6);
+    roundRectPath(ctx, x, y, w, h, 13);
+    ctx.fillStyle = 'rgba(216,70,60,0.94)';
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, x + 9, y + h / 2 + 0.5);
+    ctx.restore();
+  }
+
+  /** Zeichnet Gelände, Gebäude, Wasser und Nacht-Tönung – nur wenn sich die Ansicht ändert. */
   drawBackground(game, view) {
     const cam = this.camera;
     const night = Math.round(nightness(game.hour) * 40) / 40;
     const region = game.viewRegion();
     const key = [
       cam.x.toFixed(2), cam.y.toFixed(2), cam.scale.toFixed(5), this.cssW, this.cssH, this.dpr,
-      night, region.f.toFixed(3), view.demo ? 1 : 0,
+      night, region.x.toFixed(1), region.y.toFixed(1), region.w.toFixed(1), view.demo ? 1 : 0,
     ].join('|');
-    if (key !== this.bgKey || this.bgMap !== game.map) {
+    const layer = this.tilesLayer;
+    if (layer.map !== game.map) {
+      layer.reset(game.map);
+      this.bgKey = '';
+    }
+    if (key !== this.bgKey) {
       if (this.bg.width !== this.canvas.width || this.bg.height !== this.canvas.height) {
         this.bg.width = this.canvas.width;
         this.bg.height = this.canvas.height;
@@ -197,42 +377,75 @@ export class Renderer {
       const s = cam.scale;
       const a = cam.toWorld(0, 0);
       const b = cam.toWorld(this.cssW, this.cssH);
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.fillStyle = '#EAE5DC';
+      ctx.fillRect(0, 0, this.bg.width, this.bg.height);
+      const complete = layer.draw(ctx, cam, this.dpr, 7);
       this.worldTransform();
-      game.map.drawTerrain(ctx, { x0: a.x, y0: a.y, x1: b.x, y1: b.y }, 1 / s);
-      this.screenTransform();
-      this.drawBackdrop(game, night);
-      this.worldTransform();
-      game.map.drawRivers(ctx, 1 / s);
-      game.map.drawLabels(ctx, region, s, view.demo ? 0.6 : 1);
+      game.map.drawLabels(ctx, { x0: a.x, y0: a.y, x1: b.x, y1: b.y }, s, view.demo ? 0.6 : 1);
+      // Schleier außerhalb des aktiven Stadtbereichs
+      ctx.beginPath();
+      ctx.rect(a.x - 10, a.y - 10, b.x - a.x + 20, b.y - a.y + 20);
+      ctx.rect(region.x, region.y, region.w, region.h);
+      ctx.fillStyle = 'rgba(244,239,230,0.42)';
+      ctx.fill('evenodd');
+      ctx.strokeStyle = 'rgba(120,100,70,0.18)';
+      ctx.lineWidth = 1 / s;
+      ctx.setLineDash([6 / s, 6 / s]);
+      ctx.strokeRect(region.x, region.y, region.w, region.h);
+      ctx.setLineDash([]);
       if (night > 0) {
         this.screenTransform();
         ctx.fillStyle = `rgba(24,34,72,${0.12 * night})`;
         ctx.fillRect(0, 0, this.cssW, this.cssH);
       }
       this.ctx = main;
-      this.bgKey = key;
-      this.bgMap = game.map;
+      // unvollständig: im nächsten Frame weitere Kacheln nachladen
+      this.bgKey = complete ? key : '';
     }
     this.ctx.setTransform(1, 0, 0, 1, 0, 0);
     this.ctx.drawImage(this.bg, 0, 0);
   }
 
-  drawBackdrop(game, night) {
+  /** Pfeile am Bildschirmrand zu neuen oder überfüllten Stationen außerhalb der Ansicht. */
+  drawOffscreenHints(game, realTime) {
+    const ctx = this.ctx;
     const vp = this.camera.vp;
-    const w = clamp(this.cssW * 0.4, 220, 560);
-    const h = w * 0.3;
-    const par = (this.camera.x - game.map.W / 2) * this.camera.scale * 0.04;
-    const x = this.cssW - w * 0.98 - par;
-    const y = vp.y + vp.h - h + 6;
-    drawIllimani(this.ctx, x, y, w, h, night, 0.72);
-    if (this.cssW < 700) return;
-    this.ctx.save();
-    this.ctx.font = `600 ${10}px ${FONT}`;
-    if ('letterSpacing' in this.ctx) this.ctx.letterSpacing = '1.5px';
-    this.ctx.fillStyle = 'rgba(120,128,145,0.55)';
-    this.ctx.textAlign = 'left';
-    this.ctx.fillText('ILLIMANI · 6438 m', x + w * 0.66, y + h * 0.04);
-    this.ctx.restore();
+    for (const st of game.stations) {
+      const fresh = game.time - st.born < 6;
+      if (!fresh && st.overcrowd <= 0) continue;
+      const p = this.camera.toScreen(st.x, st.y);
+      if (p.x >= vp.x && p.x <= vp.x + vp.w && p.y >= vp.y && p.y <= vp.y + vp.h) continue;
+      const cx = vp.x + vp.w / 2;
+      const cy = vp.y + vp.h / 2;
+      const dx = p.x - cx;
+      const dy = p.y - cy;
+      const k = Math.min((vp.w / 2 - 18) / Math.abs(dx || 1e-6), (vp.h / 2 - 18) / Math.abs(dy || 1e-6));
+      const x = cx + dx * k;
+      const y = cy + dy * k;
+      const ang = Math.atan2(dy, dx);
+      const danger = st.overcrowd > 0;
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(ang);
+      ctx.globalAlpha = danger ? 0.75 + 0.25 * Math.sin(realTime * 8) : 0.85;
+      ctx.fillStyle = danger ? '#D6403A' : INK;
+      ctx.beginPath();
+      ctx.moveTo(10, 0);
+      ctx.lineTo(-6, -7);
+      ctx.lineTo(-3, 0);
+      ctx.lineTo(-6, 7);
+      ctx.closePath();
+      ctx.fill();
+      ctx.rotate(-ang);
+      tracePath(ctx, st.shape, -Math.cos(ang) * 16, -Math.sin(ang) * 16, 5);
+      ctx.fillStyle = '#fff';
+      ctx.fill();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = danger ? '#D6403A' : INK;
+      ctx.stroke();
+      ctx.restore();
+    }
   }
 
   drawEffects(game) {
@@ -303,7 +516,8 @@ export class Renderer {
 
   drawPlanMasts(game, a, b, invalid, alpha) {
     const plan = game.map.mastPlan(a, b);
-    for (const t of plan.ts) drawMast(this.ctx, a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t, { invalid, alpha });
+    // gesperrte Strecke: keine hohen Masten andeuten
+    drawPlanSupports(this.ctx, plan.blocked ? { ...plan, tallTs: [] } : plan, a.x, a.y, b.x, b.y, { invalid, alpha });
   }
 
   drawNewStationLabels(game) {
@@ -351,6 +565,40 @@ export class Renderer {
     ctx.font = `500 11px ${FONT}`;
     ctx.fillStyle = '#7C7468';
     ctx.fillText(sub, x + 10, y + 32);
+    ctx.restore();
+  }
+
+  drawBuildingTip(b) {
+    const p = this.camera.toScreen(b.cx, b.minY);
+    const name = b.kind === 'highrise' || b.kind === 'approach' ? KIND_NAMES[b.kind] : b.name;
+    const sub = b.tallOk ? 'Blockiert Seile – mit hohem Mast überspannbar' : 'Sperrzone – hier führt kein Seil hinüber';
+    this.drawTip(p.x, p.y - 10, name, sub);
+  }
+
+  drawTip(x, y, title, sub) {
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.font = `700 12px ${FONT}`;
+    const w1 = ctx.measureText(title).width;
+    ctx.font = `500 11px ${FONT}`;
+    const w2 = ctx.measureText(sub).width;
+    const w = Math.max(w1, w2) + 20;
+    const h = 40;
+    const tx = clamp(x - w / 2, 6, this.cssW - w - 6);
+    let ty = y - h;
+    if (ty < 60) ty = y + 30;
+    roundRectPath(ctx, tx, ty, w, h, 8);
+    ctx.fillStyle = 'rgba(255,253,249,0.96)';
+    ctx.shadowColor = 'rgba(40,30,20,0.18)';
+    ctx.shadowBlur = 12;
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = INK;
+    ctx.font = `700 12px ${FONT}`;
+    ctx.fillText(title, tx + 10, ty + 17);
+    ctx.font = `500 11px ${FONT}`;
+    ctx.fillStyle = '#7C7468';
+    ctx.fillText(sub, tx + 10, ty + 32);
     ctx.restore();
   }
 

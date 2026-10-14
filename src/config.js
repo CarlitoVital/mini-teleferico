@@ -53,12 +53,15 @@ export const CONFIG = {
   rareShapeChance: 0.14,
   rareFromStations: 7,
 
-  // Sichtbarer Stadtbereich wächst von regionStart auf 1.0
-  regionStart: 0.58,
+  // Stadtbereich um den Startpunkt: Kantenlänge wächst bis Woche regionFullWeeks auf das
+  // regionGrowth-Fache, danach langsam weiter bis regionMaxGrowth
+  regionGrowth: 2.0,
   regionFullWeeks: 8,
+  regionMaxGrowth: 2.6,
+  maxBuildSlope: 1.9, // m Höhe pro 10 m: steiler ist kein Bauplatz
 
   // Startausstattung
-  start: { lines: 3, gondolas: 3, masts: 3, cabins: 0, interchanges: 0 },
+  start: { lines: 3, gondolas: 3, masts: 4, tallMasts: 0, cabins: 0, interchanges: 0 },
 };
 
 /** Linienfarben, angelehnt an die Farbnamen des realen Netzes. */

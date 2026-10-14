@@ -4,13 +4,11 @@ import { TAU, clamp, shade, roundRectPath, rgba } from './util.js';
 import { offsetSegment } from './line.js';
 import { tracePath } from './station.js';
 
-let nextGondolaId = 1;
-
 export const CABIN = { hang: 7, h: 12, w: 15, wBig: 22 };
 
 export class Gondola {
-  constructor(line, station) {
-    this.id = nextGondolaId++;
+  constructor(line, station, id) {
+    this.id = id;
     this.line = line;
     this.riders = [];
     this.big = false;

@@ -1,11 +1,9 @@
 // Fahrgäste und Routenwahl über das Seilbahnnetz.
 import { CONFIG } from './config.js';
 
-let nextPassengerId = 1;
-
 export class Passenger {
-  constructor(shape, born) {
-    this.id = nextPassengerId++;
+  constructor(shape, born, id) {
+    this.id = id;
     this.shape = shape;
     this.born = born;
     this.transfers = 0;

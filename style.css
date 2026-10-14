@@ -139,6 +139,41 @@ button:focus-visible {
   display: flex;
   flex-direction: column;
   line-height: 1.1;
+  white-space: nowrap;
+}
+
+.illimani {
+  width: 30px;
+  height: 17px;
+  flex: none;
+  margin-left: 2px;
+}
+
+.illimani .mtn {
+  fill: var(--mtn, #8c9aae);
+  transition: fill 1.2s;
+}
+
+.illimani .snow {
+  fill: var(--snow, #fff);
+  transition: fill 1.2s;
+}
+
+.hud-left {
+  flex-wrap: wrap;
+  max-width: calc(100vw - 260px);
+}
+
+.hud-meta {
+  flex-basis: 100%;
+  margin: -2px 0 0 6px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.8);
+  pointer-events: none;
 }
 
 #clock-day {
@@ -1072,5 +1107,335 @@ h2 {
   *::after {
     animation: none !important;
     transition: none !important;
+  }
+}
+
+/* ------------------------------------------------------------------ Seed, Menüs, Dialoge */
+.seed-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 0 auto 14px;
+}
+
+.seed-row label {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.seed-row input,
+.auth-form input {
+  height: 40px;
+  padding: 0 12px;
+  border: 1.5px solid rgba(42, 42, 46, 0.14);
+  border-radius: 12px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  font-size: 15px;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.seed-row input {
+  width: 150px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.seed-row input:focus,
+.auth-form input:focus {
+  outline: none;
+  border-color: rgba(43, 98, 196, 0.6);
+  box-shadow: 0 0 0 3px rgba(43, 98, 196, 0.15);
+}
+
+.icon-btn.small {
+  width: 40px;
+  height: 40px;
+  box-shadow: none;
+  background: rgba(42, 42, 46, 0.06);
+}
+
+.icon-btn svg .stroke {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 1.8;
+}
+
+.menu-row {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.btn.small {
+  height: 36px;
+  padding: 0 14px;
+  font-size: 14px;
+}
+
+.btn.ghost {
+  background: transparent;
+  color: var(--muted);
+}
+
+.btn.ghost:hover {
+  color: var(--red);
+  background: rgba(224, 58, 62, 0.08);
+}
+
+.btn:disabled {
+  opacity: 0.55;
+  cursor: progress;
+}
+
+.note {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.note.small {
+  font-size: 12px;
+}
+
+.note code {
+  font-size: 12px;
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: rgba(42, 42, 46, 0.07);
+}
+
+/* Dialoge über Hauptmenü und Pause */
+#screen-saves,
+#screen-account,
+#screen-board {
+  z-index: 14;
+}
+
+.saves-panel,
+.account-panel,
+.board-panel {
+  width: min(560px, 100%);
+}
+
+.saves-list {
+  margin-top: 14px;
+  display: grid;
+  gap: 8px;
+  text-align: left;
+  max-height: min(56vh, 520px);
+  overflow-y: auto;
+}
+
+.save-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 1px 6px rgba(60, 45, 25, 0.07);
+}
+
+.save-row.is-empty {
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.save-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.save-label {
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.save-main {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.save-main.empty {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.save-sub {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.save-actions {
+  display: flex;
+  gap: 4px;
+  flex: none;
+}
+
+.tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(42, 42, 46, 0.08);
+  color: var(--ink-soft);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  vertical-align: 1px;
+}
+
+.tag.server {
+  background: rgba(43, 98, 196, 0.12);
+  color: #2b62c4;
+}
+
+.auth-form {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+  text-align: left;
+}
+
+.auth-form label {
+  display: grid;
+  gap: 5px;
+  color: var(--ink-soft);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 12px;
+  background: rgba(42, 42, 46, 0.06);
+}
+
+.tab {
+  flex: 1;
+  height: 34px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink-soft);
+}
+
+.tab.active {
+  background: #fff;
+  color: var(--ink);
+  box-shadow: 0 1px 4px rgba(60, 45, 25, 0.12);
+}
+
+.form-error {
+  min-height: 18px;
+  margin: 0;
+  color: #c4302b;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.account-info {
+  text-align: left;
+}
+
+.account-info h3 {
+  margin: 16px 0 6px;
+  font-size: 14px;
+}
+
+.score-list {
+  margin: 10px 0 0;
+  padding-left: 22px;
+  text-align: left;
+  display: grid;
+  gap: 6px;
+  font-size: 14px;
+  max-height: min(50vh, 420px);
+  overflow-y: auto;
+}
+
+.score-list li.me {
+  color: #2b62c4;
+  font-weight: 700;
+}
+
+.muted {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.user-chip {
+  position: fixed;
+  top: calc(66px + var(--safe-t));
+  right: 18px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px 4px 7px;
+  border-radius: 999px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+  font-size: 12px;
+  font-weight: 700;
+  z-index: 6;
+  pointer-events: none;
+}
+
+.at-start .user-chip {
+  top: calc(14px + var(--safe-t));
+  z-index: 15;
+}
+
+.user-chip svg {
+  width: 15px;
+  height: 15px;
+  fill: var(--ink);
+}
+
+.r-ico .no {
+  stroke: var(--red);
+  stroke-width: 2.4;
+  stroke-linecap: round;
+}
+
+.res svg .block {
+  fill: #4a4753;
+}
+
+@media (max-width: 640px), (max-height: 560px) {
+  .hud-meta {
+    display: none;
+  }
+
+  .user-chip {
+    top: calc(52px + var(--safe-t));
+    right: 10px;
+  }
+
+  .save-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .save-actions {
+    justify-content: flex-end;
   }
 }
