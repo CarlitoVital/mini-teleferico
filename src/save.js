@@ -5,6 +5,7 @@ import { Station } from './station.js';
 import { Line } from './line.js';
 import { Gondola } from './gondola.js';
 import { Passenger } from './passenger.js';
+import { t } from './i18n.js';
 
 export const SAVE_VERSION = 1;
 
@@ -24,7 +25,7 @@ function passengerIn(p) {
 
 /** Spielzustand → JSON-taugliches Objekt. camera: optionale Kamera {x, y, scale, manual}. */
 export function serializeGame(game, camera = null) {
-  if (game.state === 'over') throw new Error('Beendete Runden lassen sich nicht speichern.');
+  if (game.state === 'over') throw new Error(t('err.saveOver'));
   return {
     version: SAVE_VERSION,
     seed: game.seed,
@@ -83,7 +84,6 @@ export function saveMeta(game, extra = {}) {
     savedAt: Date.now(),
     week: game.week,
     day: game.dayIndex + 1,
-    dayName: game.dayName,
     score: game.score,
     area: game.startArea.name,
     seed: game.seed,
@@ -97,9 +97,9 @@ export function saveMeta(game, extra = {}) {
 /** Ältere Formate auf den aktuellen Stand bringen (Version 1 ist die erste). */
 export function migrate(data) {
   if (!data || typeof data !== 'object' || !Number.isFinite(data.version)) {
-    throw new Error('Unbekanntes Spielstand-Format.');
+    throw new Error(t('err.saveFormat'));
   }
-  if (data.version > SAVE_VERSION) throw new Error('Der Spielstand stammt aus einer neueren Spielversion.');
+  if (data.version > SAVE_VERSION) throw new Error(t('err.saveNewer'));
   // Künftige Migrationen: if (data.version === 1) { …; data.version = 2; }
   return data;
 }
@@ -128,7 +128,7 @@ export function deserializeGame(raw) {
   game.rng.setState(d.rng);
 
   game.stations = d.stations.map((s, i) => {
-    if (s.id !== i) throw new Error('Spielstand beschädigt (Stationen).');
+    if (s.id !== i) throw new Error(t('err.saveCorrupt'));
     const st = new Station({ id: s.id, x: s.x, y: s.y, shape: s.shape, name: s.name, elev: s.elev, born: s.born });
     for (const k of STATION_STATE) st[k] = s[k];
     st.waiting = s.waiting.map(passengerIn);
@@ -137,7 +137,7 @@ export function deserializeGame(raw) {
   const station = (id) => {
     if (id === null || id === undefined) return null;
     const st = game.stations[id];
-    if (!st) throw new Error('Spielstand beschädigt (Verweis auf Station).');
+    if (!st) throw new Error(t('err.saveCorrupt'));
     return st;
   };
   game.lines = d.lines.map((l) => {
@@ -150,7 +150,7 @@ export function deserializeGame(raw) {
   const lineById = new Map(game.lines.map((l) => [l.id, l]));
   game.gondolas = d.gondolas.map((g) => {
     const line = lineById.get(g.line);
-    if (!line) throw new Error('Spielstand beschädigt (Gondel ohne Linie).');
+    if (!line) throw new Error(t('err.saveCorrupt'));
     const go = Object.create(Gondola.prototype);
     for (const k of GONDOLA_FIELDS) go[k] = g[k];
     go.line = line;

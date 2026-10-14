@@ -1,27 +1,36 @@
 // Browser-Client für das optionale Teleférico-Backend (Konto, Spielstände, Bestenliste).
 // Läuft die Seite ohne Backend (z. B. "npx serve ."), liefert probe() einfach false.
+import { t, has, getLang } from './i18n.js';
 
 // Relativ zur Seite, damit es auch unter einem Unterpfad hinter einem Proxy funktioniert
 const BASE = 'api/';
 const PROBE_TIMEOUT_MS = 2500;
 const REQUEST_TIMEOUT_MS = 15000;
-const OFFLINE = 'Server nicht erreichbar.';
-
 export class ApiError extends Error {
-  constructor(message, status) {
+  constructor(message, status, code = null) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
+    this.code = code;
   }
 }
 
 function fallbackMessage(status) {
-  if (status === 401) return 'Nicht angemeldet.';
-  if (status === 404) return 'Nicht gefunden.';
-  if (status === 413) return 'Daten zu groß.';
-  if (status === 429) return 'Zu viele Anfragen. Bitte später erneut versuchen.';
-  if (status >= 500) return 'Serverfehler. Bitte später erneut versuchen.';
-  return 'Anfrage fehlgeschlagen.';
+  if (status === 401) return t('err.status401');
+  if (status === 404) return t('err.status404');
+  if (status === 413) return t('err.status413');
+  if (status === 429) return t('err.status429');
+  if (status >= 500) return t('err.status5xx');
+  return t('err.generic');
+}
+
+/** Fehlertext in der aktuellen Sprache: über den Fehlercode des Servers, sonst nach Status. */
+function errorMessage(payload, status) {
+  const code = payload && typeof payload.code === 'string' ? payload.code : null;
+  if (code && has(`err.${code}`)) return t(`err.${code}`, payload.params || {});
+  // Server-Texte sind deutsch – in anderen Sprachen lieber die allgemeine Meldung
+  if (payload && typeof payload.error === 'string' && getLang() === 'de') return payload.error;
+  return fallbackMessage(status);
 }
 
 async function request(method, path, body, timeoutMs = REQUEST_TIMEOUT_MS) {
@@ -50,16 +59,15 @@ async function request(method, path, body, timeoutMs = REQUEST_TIMEOUT_MS) {
       }
     }
   } catch {
-    throw new ApiError(OFFLINE, 0);
+    throw new ApiError(t('err.offline'), 0, 'offline');
   } finally {
     clearTimeout(timer);
   }
   if (!res.ok) {
-    const msg = payload && typeof payload.error === 'string' ? payload.error : fallbackMessage(res.status);
-    throw new ApiError(msg, res.status);
+    throw new ApiError(errorMessage(payload, res.status), res.status, payload && typeof payload.code === 'string' ? payload.code : null);
   }
   if (res.status !== 204 && (payload === null || typeof payload !== 'object')) {
-    throw new ApiError('Ungültige Antwort vom Server.', res.status);
+    throw new ApiError(t('err.badResponse'), res.status);
   }
   return payload;
 }

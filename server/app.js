@@ -61,12 +61,21 @@ const MSG = {
   internal: 'Interner Serverfehler.',
 };
 
+/**
+ * Fehler mit HTTP-Status. code (stabil, z. B. 'loginFailed') und params erlauben dem Client,
+ * die Meldung in seiner Sprache anzuzeigen; message ist der deutsche Text.
+ */
 class HttpError extends Error {
-  constructor(status, message) {
+  constructor(status, message, code = null, params = null) {
     super(message);
     this.status = status;
+    this.code = code;
+    this.params = params;
   }
 }
+
+/** Fehler für einen Eintrag aus MSG (Schlüssel = Fehlercode). */
+const fail = (status, key, params = null) => new HttpError(status, MSG[key], key, params);
 
 function isPlainObject(v) {
   if (v === null || typeof v !== 'object' || Array.isArray(v)) return false;
@@ -83,23 +92,32 @@ const clientIp = (req) => ipKey(req.ip || req.socket?.remoteAddress);
 const PREHASH_KEY = 'teleferico/passwort/v1';
 const prehash = (password) => crypto.createHmac('sha256', PREHASH_KEY).update(password, 'utf8').digest('base64');
 
+/** Liefert null oder einen HttpError (400) mit Code. */
 function checkUsername(u) {
-  if (typeof u !== 'string' || !u) return 'Bitte einen Benutzernamen angeben.';
-  if (u.trim() !== u) return 'Der Benutzername darf nicht mit Leerzeichen beginnen oder enden.';
-  if (!USERNAME_RE.test(u)) return 'Benutzername: 3–24 Zeichen, erlaubt sind A–Z, a–z, 0–9 sowie _ . -';
+  if (typeof u !== 'string' || !u) return new HttpError(400, 'Bitte einen Benutzernamen angeben.', 'usernameMissing');
+  if (u.trim() !== u) {
+    return new HttpError(400, 'Der Benutzername darf nicht mit Leerzeichen beginnen oder enden.', 'usernameSpaces');
+  }
+  if (!USERNAME_RE.test(u)) {
+    return new HttpError(400, 'Benutzername: 3–24 Zeichen, erlaubt sind A–Z, a–z, 0–9 sowie _ . -', 'usernameInvalid');
+  }
   return null;
 }
 
 function checkPassword(p) {
-  if (typeof p !== 'string' || !p) return 'Bitte ein Passwort angeben.';
-  if (p.length < PASSWORD_MIN) return `Das Passwort muss mindestens ${PASSWORD_MIN} Zeichen lang sein.`;
-  if (p.length > PASSWORD_MAX) return `Das Passwort darf höchstens ${PASSWORD_MAX} Zeichen lang sein.`;
+  if (typeof p !== 'string' || !p) return new HttpError(400, 'Bitte ein Passwort angeben.', 'passwordMissing');
+  if (p.length < PASSWORD_MIN) {
+    return new HttpError(400, `Das Passwort muss mindestens ${PASSWORD_MIN} Zeichen lang sein.`, 'passwordShort', { min: PASSWORD_MIN });
+  }
+  if (p.length > PASSWORD_MAX) {
+    return new HttpError(400, `Das Passwort darf höchstens ${PASSWORD_MAX} Zeichen lang sein.`, 'passwordLong', { max: PASSWORD_MAX });
+  }
   return null;
 }
 
 function checkSlot(slot) {
   if (typeof slot !== 'string' || !SLOT_RE.test(slot)) {
-    throw new HttpError(400, 'Ungültiger Speicherplatz (erlaubt: a–z, 0–9 und -, höchstens 40 Zeichen).');
+    throw new HttpError(400, 'Ungültiger Speicherplatz (erlaubt: a–z, 0–9 und -, höchstens 40 Zeichen).', 'badSlot');
   }
   return slot;
 }
@@ -124,12 +142,12 @@ function nestedDeeper(root, max) {
 
 /** Prüft {meta, data} und liefert beides als JSON-Text. */
 function parseSaveBody(body) {
-  if (!isPlainObject(body)) throw new HttpError(400, 'Erwartet wird ein JSON-Objekt mit „meta“ und „data“.');
+  if (!isPlainObject(body)) throw new HttpError(400, 'Erwartet wird ein JSON-Objekt mit „meta“ und „data“.', 'badSave');
   const { meta, data } = body;
-  if (!isPlainObject(meta)) throw new HttpError(400, '„meta“ muss ein Objekt sein.');
-  if (!isPlainObject(data)) throw new HttpError(400, '„data“ muss ein Objekt sein.');
+  if (!isPlainObject(meta)) throw new HttpError(400, '„meta“ muss ein Objekt sein.', 'badSave');
+  if (!isPlainObject(data)) throw new HttpError(400, '„data“ muss ein Objekt sein.', 'badSave');
   if (nestedDeeper(meta, MAX_DEPTH) || nestedDeeper(data, MAX_DEPTH)) {
-    throw new HttpError(400, `Spielstand ist zu tief verschachtelt (höchstens ${MAX_DEPTH} Ebenen).`);
+    throw new HttpError(400, `Spielstand ist zu tief verschachtelt (höchstens ${MAX_DEPTH} Ebenen).`, 'badSave');
   }
   let metaJson;
   let dataJson;
@@ -138,14 +156,14 @@ function parseSaveBody(body) {
     dataJson = JSON.stringify(data);
   } catch {
     // Sicherheitsnetz (Tiefe ist oben bereits begrenzt)
-    throw new HttpError(400, 'Spielstand kann nicht gespeichert werden.');
+    throw new HttpError(400, 'Spielstand kann nicht gespeichert werden.', 'badSave');
   }
   if (metaJson.length > MAX_META_CHARS) {
-    throw new HttpError(400, `„meta“ ist zu groß (höchstens ${MAX_META_CHARS} Zeichen).`);
+    throw new HttpError(400, `„meta“ ist zu groß (höchstens ${MAX_META_CHARS} Zeichen).`, 'badSave');
   }
   // Nach dem Serialisieren prüfen: Zahlen wie 9e20 werden dabei viel länger als im Request
   if (Buffer.byteLength(dataJson, 'utf8') > MAX_DATA_BYTES) {
-    throw new HttpError(413, `Spielstand ist zu groß (höchstens ${MAX_DATA_BYTES / 1024} KB).`);
+    throw new HttpError(413, `Spielstand ist zu groß (höchstens ${MAX_DATA_BYTES / 1024} KB).`, 'saveTooBig', { kb: MAX_DATA_BYTES / 1024 });
   }
   return { metaJson, dataJson };
 }
@@ -153,41 +171,49 @@ function parseSaveBody(body) {
 function parseScoreBody(body) {
   const { score, week, seed, area, time } = isPlainObject(body) ? body : {};
   if (!Number.isInteger(score) || score < 0 || score > MAX_SCORE) {
-    throw new HttpError(400, '„score“ muss eine ganze Zahl von 0 bis 10.000.000 sein.');
+    throw new HttpError(400, '„score“ muss eine ganze Zahl von 0 bis 10.000.000 sein.', 'badScore');
   }
   if (!Number.isInteger(week) || week < 1 || week > MAX_WEEK) {
-    throw new HttpError(400, '„week“ muss eine ganze Zahl von 1 bis 999 sein.');
+    throw new HttpError(400, '„week“ muss eine ganze Zahl von 1 bis 999 sein.', 'badScore');
   }
   if (typeof seed !== 'string' || seed.length > MAX_SEED || !LABEL_RE.test(seed)) {
-    throw new HttpError(400, `„seed“ muss ein Text mit höchstens ${MAX_SEED} Zeichen sein (ohne Sonderzeichen wie < > & " ').`);
+    throw new HttpError(400, `„seed“ muss ein Text mit höchstens ${MAX_SEED} Zeichen sein (ohne Sonderzeichen wie < > & " ').`, 'badScore');
   }
   if (typeof area !== 'string' || area.length > MAX_AREA || !LABEL_RE.test(area)) {
-    throw new HttpError(400, `„area“ muss ein Text mit höchstens ${MAX_AREA} Zeichen sein (ohne Sonderzeichen wie < > & " ').`);
+    throw new HttpError(400, `„area“ muss ein Text mit höchstens ${MAX_AREA} Zeichen sein (ohne Sonderzeichen wie < > & " ').`, 'badScore');
   }
   if (typeof time !== 'number' || !Number.isFinite(time) || time < 0 || time > MAX_TIME) {
-    throw new HttpError(400, `„time“ muss eine Zahl von 0 bis ${MAX_TIME} sein.`);
+    throw new HttpError(400, `„time“ muss eine Zahl von 0 bis ${MAX_TIME} sein.`, 'badScore');
   }
   const problem = implausible({ score, week, seed, area, time });
-  if (problem) throw new HttpError(400, `Ergebnis abgelehnt: ${problem}`);
+  if (problem) throw new HttpError(400, `Ergebnis abgelehnt: ${problem.message}`, problem.code);
   return { score, week, seed, area, time };
 }
 
 /** Übersetzt Fehler in Status + deutsche Meldung (ohne interne Details). */
 function describeError(err) {
-  if (err instanceof HttpError) return { status: err.status, message: err.message };
+  if (err instanceof HttpError) return { status: err.status, message: err.message, code: err.code, params: err.params };
   switch (err?.type) {
     case 'entity.too.large':
-      return { status: 413, message: MSG.tooLarge };
+      return { status: 413, message: MSG.tooLarge, code: 'tooLarge' };
     case 'entity.parse.failed':
-      return { status: 400, message: MSG.badJson };
+      return { status: 400, message: MSG.badJson, code: 'badJson' };
     case 'encoding.unsupported':
     case 'charset.unsupported':
-      return { status: 415, message: 'Zeichenkodierung wird nicht unterstützt.' };
+      return { status: 415, message: 'Zeichenkodierung wird nicht unterstützt.', code: 'badRequest' };
     default:
   }
   const status = err?.status ?? err?.statusCode;
-  if (Number.isInteger(status) && status >= 400 && status < 500) return { status, message: MSG.badRequest };
-  return { status: 500, message: MSG.internal };
+  if (Number.isInteger(status) && status >= 400 && status < 500) return { status, message: MSG.badRequest, code: 'badRequest' };
+  return { status: 500, message: MSG.internal, code: 'internal' };
+}
+
+/** JSON-Fehlerantwort: deutscher Text plus Code (und Parameter) für die Übersetzung im Client. */
+function errorBody({ message, code, params }) {
+  const body = { error: message };
+  if (code) body.code = code;
+  if (params) body.params = params;
+  return body;
 }
 
 export function createApp({
@@ -255,10 +281,10 @@ export function createApp({
 
   const writeSave = db.transaction((userId, slot, metaJson, dataJson, t) => {
     if (!q.saveExists.get(userId, slot) && q.countSaves.get(userId).n >= MAX_SLOTS) {
-      throw new HttpError(409, `Höchstens ${MAX_SLOTS} Spielstände pro Konto – bitte zuerst einen löschen.`);
+      throw new HttpError(409, `Höchstens ${MAX_SLOTS} Spielstände pro Konto – bitte zuerst einen löschen.`, 'slotsFull', { max: MAX_SLOTS });
     }
     if (q.otherSavesBytes.get(userId, slot).n + Buffer.byteLength(dataJson, 'utf8') > MAX_ACCOUNT_BYTES) {
-      throw new HttpError(409, 'Der Speicherplatz deines Kontos ist voll – bitte zuerst einen Spielstand löschen.');
+      throw new HttpError(409, 'Der Speicherplatz deines Kontos ist voll – bitte zuerst einen Spielstand löschen.', 'quotaFull');
     }
     q.upsertSave.run(userId, slot, metaJson, dataJson, t);
   });
@@ -284,20 +310,21 @@ export function createApp({
   const saveUserLimiter = new RateLimiter({ limit: 30, windowMs: MINUTE, now });
   const scoreUserLimiter = new RateLimiter({ limit: 10, windowMs: MINUTE, now });
 
-  function tooMany(res, limiter, key, message) {
+  /** 429 mit Retry-After; code ist der Schlüssel in MSG. */
+  function tooMany(res, limiter, key, code) {
     res.set('Retry-After', String(limiter.retryAfter(key)));
-    res.status(429).json({ error: message });
+    res.status(429).json(errorBody({ message: MSG[code], code }));
   }
 
   // Zählt jede Anfrage – vor dem Einlesen des Bodys
-  const gate = (limiter, message, keyOf) => (req, res, next) => {
+  const gate = (limiter, code, keyOf) => (req, res, next) => {
     const key = keyOf(req);
-    if (limiter.blocked(key)) return tooMany(res, limiter, key, message);
+    if (limiter.blocked(key)) return tooMany(res, limiter, key, code);
     limiter.hit(key);
     next();
   };
-  const ipGate = (limiter, message) => gate(limiter, message, clientIp);
-  const userGate = (limiter, message) => gate(limiter, message, (req) => req.user.id);
+  const ipGate = (limiter, code) => gate(limiter, code, clientIp);
+  const userGate = (limiter, code) => gate(limiter, code, (req) => req.user.id);
 
   function startSession(res, userId) {
     const token = newToken();
@@ -320,7 +347,7 @@ export function createApp({
   function csrfGuard(req, res, next) {
     if (SAFE_METHODS.has(req.method)) return next();
     const site = req.get('sec-fetch-site');
-    if (site && site.toLowerCase() === 'cross-site') throw new HttpError(403, MSG.csrf);
+    if (site && site.toLowerCase() === 'cross-site') throw fail(403, 'csrf');
     const origin = req.get('origin');
     if (origin !== undefined) {
       let originHost = null;
@@ -331,11 +358,11 @@ export function createApp({
       }
       if (allowedOrigins.size > 0) {
         // Hinter einem Proxy, der den Host-Header umschreibt: feste Liste erlaubter Herkünfte
-        if (!allowedOrigins.has(origin.toLowerCase())) throw new HttpError(403, MSG.csrf);
+        if (!allowedOrigins.has(origin.toLowerCase())) throw fail(403, 'csrf');
         return next();
       }
       const host = (trustProxy ? req.host : req.get('host')) || '';
-      if (!originHost || originHost.toLowerCase() !== host.toLowerCase()) throw new HttpError(403, MSG.csrf);
+      if (!originHost || originHost.toLowerCase() !== host.toLowerCase()) throw fail(403, 'csrf');
     }
     next();
   }
@@ -382,7 +409,7 @@ export function createApp({
   }
 
   function requireUser(req, res, next) {
-    if (!req.user) throw new HttpError(401, MSG.unauthorized);
+    if (!req.user) throw fail(401, 'unauthorized');
     next();
   }
 
@@ -403,13 +430,13 @@ export function createApp({
     res.json({ ok: true, version: API_VERSION });
   });
 
-  api.post('/auth/register', ipGate(registerIpTotal, MSG.registerLimited), json, async (req, res) => {
+  api.post('/auth/register', ipGate(registerIpTotal, 'registerLimited'), json, async (req, res) => {
     const ip = clientIp(req);
-    if (registerIpLimiter.blocked(ip)) return tooMany(res, registerIpLimiter, ip, MSG.registerLimited);
+    if (registerIpLimiter.blocked(ip)) return tooMany(res, registerIpLimiter, ip, 'registerLimited');
     const { username, password } = bodyOf(req);
     const problem = checkUsername(username) ?? checkPassword(password);
-    if (problem) throw new HttpError(400, problem);
-    if (q.userByName.get(username)) throw new HttpError(409, MSG.taken);
+    if (problem) throw problem;
+    if (q.userByName.get(username)) throw fail(409, 'taken');
     // Vor dem (asynchronen) Hashen zählen, damit parallele Anfragen das Limit nicht umgehen
     registerIpLimiter.hit(ip);
     let id;
@@ -419,7 +446,7 @@ export function createApp({
     } catch (err) {
       registerIpLimiter.undo(ip); // kein Konto angelegt
       // gleichzeitige Registrierung desselben Namens
-      if (err?.code === 'SQLITE_CONSTRAINT_UNIQUE') throw new HttpError(409, MSG.taken);
+      if (err?.code === 'SQLITE_CONSTRAINT_UNIQUE') throw fail(409, 'taken');
       throw err;
     }
     dropCurrentSession(req);
@@ -427,30 +454,30 @@ export function createApp({
     res.status(201).json({ user: { id, username } });
   });
 
-  api.post('/auth/login', ipGate(loginIpTotal, MSG.loginLimited), json, async (req, res) => {
+  api.post('/auth/login', ipGate(loginIpTotal, 'loginLimited'), json, async (req, res) => {
     const ip = clientIp(req);
-    if (loginIpLimiter.blocked(ip)) return tooMany(res, loginIpLimiter, ip, MSG.loginLimited);
+    if (loginIpLimiter.blocked(ip)) return tooMany(res, loginIpLimiter, ip, 'loginLimited');
     // Als Fehlversuch zählen; ein erfolgreicher Login nimmt ihn unten wieder zurück
     loginIpLimiter.hit(ip);
     const { username, password } = bodyOf(req);
     if (typeof username !== 'string' || typeof password !== 'string' || !username || !password) {
-      throw new HttpError(400, 'Bitte Benutzername und Passwort angeben.');
+      throw new HttpError(400, 'Bitte Benutzername und Passwort angeben.', 'credentialsMissing');
     }
     // Formal unmögliche Angaben können zu keinem Konto passen
-    if (!USERNAME_RE.test(username) || password.length > PASSWORD_MAX) throw new HttpError(401, MSG.loginFailed);
+    if (!USERNAME_RE.test(username) || password.length > PASSWORD_MAX) throw fail(401, 'loginFailed');
     const key = username.toLowerCase();
     // Bewusst laut Vorgabe: Die Sperre gilt auch für das richtige Passwort, sonst wäre sie wirkungslos.
     // Folge: Jeder kann ein Konto für 15 Minuten sperren (begrenzt durch das IP-Limit).
     if (loginUserLimiter.blocked(key)) {
       // Kein Passwort geprüft: zählt nicht gegen die IP (sonst sperrt ein Konto alle hinter derselben Adresse)
       loginIpLimiter.undo(ip);
-      return tooMany(res, loginUserLimiter, key, MSG.loginLimited);
+      return tooMany(res, loginUserLimiter, key, 'loginLimited');
     }
     // Versuch vor dem (asynchronen) Vergleich zählen, damit parallele Anfragen das Limit nicht umgehen
     loginUserLimiter.hit(key);
     const user = q.userByName.get(username);
     const ok = await bcrypt.compare(prehash(password), user ? user.pass_hash : dummyHash);
-    if (!user || !ok) throw new HttpError(401, MSG.loginFailed);
+    if (!user || !ok) throw fail(401, 'loginFailed');
     loginUserLimiter.reset(key);
     loginIpLimiter.undo(ip);
     dropCurrentSession(req);
@@ -481,13 +508,13 @@ export function createApp({
   api.get('/saves/:slot', requireUser, (req, res) => {
     const slot = checkSlot(req.params.slot);
     const row = q.getSave.get(req.user.id, slot);
-    if (!row) throw new HttpError(404, MSG.saveNotFound);
+    if (!row) throw fail(404, 'saveNotFound');
     res
       .type('application/json')
       .send(`{"slot":${JSON.stringify(slot)},"meta":${row.meta},"data":${row.data},"updatedAt":${row.updated_at}}`);
   });
 
-  const saveGate = userGate(saveUserLimiter, MSG.savesLimited);
+  const saveGate = userGate(saveUserLimiter, 'savesLimited');
 
   api.put('/saves/:slot', requireUser, saveGate, json, (req, res) => {
     const slot = checkSlot(req.params.slot);
@@ -504,7 +531,7 @@ export function createApp({
       try {
         body = JSON.parse(body);
       } catch {
-        throw new HttpError(400, MSG.badJson);
+        throw fail(400, 'badJson');
       }
     }
     const { metaJson, dataJson } = parseSaveBody(body);
@@ -514,12 +541,12 @@ export function createApp({
 
   api.delete('/saves/:slot', requireUser, (req, res) => {
     const slot = checkSlot(req.params.slot);
-    if (q.deleteSave.run(req.user.id, slot).changes === 0) throw new HttpError(404, MSG.saveNotFound);
+    if (q.deleteSave.run(req.user.id, slot).changes === 0) throw fail(404, 'saveNotFound');
     res.json({ ok: true });
   });
 
   // ---- Bestenliste
-  api.post('/scores', requireUser, userGate(scoreUserLimiter, MSG.scoresLimited), json, (req, res) => {
+  api.post('/scores', requireUser, userGate(scoreUserLimiter, 'scoresLimited'), json, (req, res) => {
     const s = parseScoreBody(req.body);
     res.status(201).json(addScore(req.user.id, s, now()));
   });
@@ -549,15 +576,15 @@ export function createApp({
   });
 
   api.use((req, res) => {
-    res.status(404).json({ error: MSG.apiNotFound });
+    res.status(404).json(errorBody({ message: MSG.apiNotFound, code: 'apiNotFound' }));
   });
 
   // eslint-disable-next-line no-unused-vars
   api.use((err, req, res, next) => {
-    const { status, message } = describeError(err);
-    if (status >= 500) console.error('[teleferico] Fehler bei', req.method, req.originalUrl, err);
+    const info = describeError(err);
+    if (info.status >= 500) console.error('[teleferico] Fehler bei', req.method, req.originalUrl, err);
     if (res.headersSent) return void res.end();
-    res.status(status).json({ error: message });
+    res.status(info.status).json(errorBody(info));
   });
 
   // ---------------------------------------------------------------- App

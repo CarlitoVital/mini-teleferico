@@ -264,7 +264,7 @@ serverTest('Login: Erfolg, falsches Passwort, unbekannter Benutzer', async (srv)
   const impossible = await srv.client().post('/api/auth/login', { username: 'x y', password: 'falsch123' });
   for (const res of [wrong, unknown, impossible]) {
     assert.equal(res.status, 401);
-    assert.deepEqual(res.json, { error: LOGIN_FAILED });
+    assert.deepEqual(res.json, { error: LOGIN_FAILED, code: 'loginFailed' });
     assert.equal(res.setCookies.length, 0);
   }
 
@@ -285,7 +285,7 @@ serverTest('Login: jedes Zeichen des Passworts zählt (bcrypt liest nur 72 Byte)
     await registered(srv, username, password);
     const wrong = await srv.client().post('/api/auth/login', { username, password: samePrefix });
     assert.equal(wrong.status, 401, username);
-    assert.deepEqual(wrong.json, { error: LOGIN_FAILED });
+    assert.deepEqual(wrong.json, { error: LOGIN_FAILED, code: 'loginFailed' });
     assert.equal(wrong.setCookies.length, 0);
     const ok = await srv.client().post('/api/auth/login', { username, password });
     assert.equal(ok.status, 200, username);
@@ -880,7 +880,7 @@ serverTest('Rate-Limit: 8 Fehlversuche pro Benutzername in 15 Minuten', async (s
   }
   const blocked = await c.post('/api/auth/login', { username: 'lena', password: 'falsch9xx' });
   assert.equal(blocked.status, 429);
-  assert.deepEqual(blocked.json, { error: LOGIN_LIMITED });
+  assert.deepEqual(blocked.json, { error: LOGIN_LIMITED, code: 'loginLimited' });
   assert.ok(Number(blocked.headers.get('retry-after')) > 0);
 
   // auch mit richtigem Passwort und anderer Schreibweise gesperrt
@@ -911,7 +911,7 @@ serverTest('Rate-Limit: 30 Login-Versuche pro IP in 15 Minuten', async (srv) => 
   }
   const blocked = await c.post('/api/auth/login', { username: 'user99', password: 'falsch123' });
   assert.equal(blocked.status, 429);
-  assert.deepEqual(blocked.json, { error: LOGIN_LIMITED });
+  assert.deepEqual(blocked.json, { error: LOGIN_LIMITED, code: 'loginLimited' });
   srv.advance(15 * MINUTE + 1);
   assert.equal((await c.post('/api/auth/login', { username: 'user99', password: 'falsch123' })).status, 401);
 });
@@ -1306,6 +1306,8 @@ function shimFetch(base, seen) {
 
 serverTest('Browser-Client src/api.js gegen den Server', async (srv) => {
   const { api, ApiError } = await import('../src/api.js');
+  const { setLang } = await import('../src/i18n.js');
+  setLang('de');
   const seen = [];
   const restore = shimFetch(srv.base, seen);
   try {
@@ -1316,8 +1318,16 @@ serverTest('Browser-Client src/api.js gegen den Server', async (srv) => {
 
     await assert.rejects(
       api.login('niemand', 'falsch123'),
-      (e) => e instanceof ApiError && e.status === 401 && e.message === LOGIN_FAILED,
+      (e) => e instanceof ApiError && e.status === 401 && e.code === 'loginFailed' && e.message === LOGIN_FAILED,
     );
+    // Fehlermeldungen kommen über den Code in der gewählten Sprache
+    setLang('en');
+    await assert.rejects(api.login('niemand', 'falsch123'), (e) => e.message === 'Wrong username or password.');
+    setLang('es');
+    await assert.rejects(api.login('niemand', 'falsch123'), (e) => e.message === 'Nombre de usuario o contraseña incorrectos.');
+    await assert.rejects(api.register('x', 'geheim123'), (e) => e.code === 'usernameInvalid' && /Nombre de usuario/.test(e.message));
+    await assert.rejects(api.register('kurzpass', 'kurz'), (e) => e.code === 'passwordShort' && /al menos 8 caracteres/.test(e.message));
+    setLang('de');
     const user = await api.register('client', 'geheim123');
     assert.equal(user.username, 'client');
     assert.deepEqual(api.user, user);
@@ -1331,10 +1341,16 @@ serverTest('Browser-Client src/api.js gegen den Server', async (srv) => {
     );
     assert.deepEqual((await api.getSave('auto')).data, { a: 1 });
     assert.equal(await api.getSave('fehlt'), null);
-    await assert.rejects(api.putSave('BAD', {}, {}), (e) => e instanceof ApiError && e.status === 400 && !!e.message);
+    await assert.rejects(api.putSave('BAD', {}, {}), (e) => e instanceof ApiError && e.status === 400 && e.code === 'badSlot' && !!e.message);
     assert.equal(await api.deleteSave('auto'), true);
     assert.equal(await api.deleteSave('auto'), false);
 
+    setLang('en');
+    await assert.rejects(
+      api.submitScore({ score: 99999, week: 2, seed: 'ABC', area: 'Zentrum', time: 120 }),
+      (e) => e.code === 'scoreTooHigh' && /not possible/.test(e.message),
+    );
+    setLang('de');
     const sc = await api.submitScore({ score: 42, week: 2, seed: 123456, area: 'Zentrum', time: 120 });
     assert.equal(sc.best, 42);
     assert.equal((await api.myScores())[0].seed, '123456');
@@ -1363,6 +1379,8 @@ serverTest('Browser-Client src/api.js gegen den Server', async (srv) => {
 
 test('Browser-Client: ohne Backend wirft probe() nie', async () => {
   const { api, ApiError } = await import('../src/api.js');
+  const { setLang } = await import('../src/i18n.js');
+  setLang('de');
   const realFetch = globalThis.fetch;
   try {
     globalThis.fetch = async () => {

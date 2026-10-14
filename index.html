@@ -13,15 +13,15 @@
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
-    <canvas id="game" aria-label="Spielfeld: Karte von La Paz und El Alto"></canvas>
+    <canvas id="game" aria-label="Spielfeld: Karte von La Paz und El Alto" data-i18n-aria="canvas.label"></canvas>
 
     <header id="hud" class="hud" hidden>
       <div class="hud-left">
-        <div class="pill score" title="Beförderte Fahrgäste">
+        <div class="pill score" title="Beförderte Fahrgäste" data-i18n-title="hud.score">
           <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><circle cx="12" cy="7.5" r="3.4" /><path d="M5 20.5c.7-4.3 3.5-6.8 7-6.8s6.3 2.5 7 6.8z" /></svg>
           <span id="score">0</span>
         </div>
-        <div class="pill clock" title="Tageszeit und Woche">
+        <div class="pill clock" title="Tageszeit und Woche" data-i18n-title="hud.clock">
           <svg viewBox="0 0 36 36" class="clock-ring" aria-hidden="true">
             <circle class="track" cx="18" cy="18" r="14" />
             <circle id="clock-arc" class="arc" cx="18" cy="18" r="14" />
@@ -32,39 +32,39 @@
             <path class="snow" d="m9.6 11.7 2.4-4.2 2 1.5 3-5 2.5 2.5L22 3l3.5 5 1.1 1.2-2.3.6-1.7-1.5-1.6 1.3-1.8-1.2-1.8 1.4-1.8-.9-2 1.7-1.8-.7Z" />
           </svg>
         </div>
-        <span id="rush" class="badge" hidden>Stoßzeit</span>
+        <span id="rush" class="badge" hidden data-i18n="hud.rush">Stoßzeit</span>
         <div id="hud-meta" class="hud-meta"></div>
       </div>
       <div class="hud-right">
-        <button id="btn-center" class="icon-btn" hidden aria-label="Ansicht zentrieren (C)" title="Ansicht zentrieren (C)"></button>
-        <button id="btn-pause" class="icon-btn" aria-label="Pause (Leertaste)" title="Pause (Leertaste)"></button>
-        <button id="btn-speed" class="icon-btn txt" aria-label="Spielgeschwindigkeit" title="Tempo 1×/2× (Tasten 1 und 2)">1×</button>
-        <button id="btn-sound" class="icon-btn" aria-label="Ton an/aus" title="Ton an/aus (M)"></button>
-        <button id="btn-menu" class="icon-btn" aria-label="Menü" title="Menü (Esc)"></button>
+        <button id="btn-center" class="icon-btn" hidden aria-label="Ansicht zentrieren (C)" title="Ansicht zentrieren (C)" data-i18n-aria="hud.center" data-i18n-title="hud.center"></button>
+        <button id="btn-pause" class="icon-btn" aria-label="Pause (Leertaste)" title="Pause (Leertaste)" data-i18n-title="hud.pause"></button>
+        <button id="btn-speed" class="icon-btn txt" aria-label="Spielgeschwindigkeit" title="Tempo 1×/2× (Tasten 1 und 2)" data-i18n-aria="hud.speed" data-i18n-title="hud.speedTitle">1×</button>
+        <button id="btn-sound" class="icon-btn" aria-label="Ton an/aus" title="Ton an/aus (M)" data-i18n-aria="hud.sound" data-i18n-title="hud.soundTitle"></button>
+        <button id="btn-menu" class="icon-btn" aria-label="Menü" title="Menü (Esc)" data-i18n-aria="hud.menu" data-i18n-title="hud.menuTitle"></button>
       </div>
     </header>
 
     <footer id="bar" class="bar" hidden>
       <div class="bar-inner">
-        <div id="line-dots" class="line-dots" aria-label="Linien"></div>
-        <button id="btn-delete" class="delete-btn" hidden title="Ausgewählte Linie löschen (Entf)">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>Löschen
+        <div id="line-dots" class="line-dots" aria-label="Linien" data-i18n-aria="bar.lines"></div>
+        <button id="btn-delete" class="delete-btn" hidden title="Ausgewählte Linie löschen (Entf)" data-i18n-title="bar.deleteTitle">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg><span data-i18n="bar.delete">Löschen</span>
         </button>
         <span class="sep" aria-hidden="true"></span>
         <div id="resources" class="resources">
-          <button class="res" data-kind="gondola" data-label="Gondeln" title="Gondel – auf eine Linie ziehen" aria-label="Gondeln">
+          <button class="res" data-kind="gondola" title="Gondel – auf eine Linie ziehen" aria-label="Gondeln" data-i18n-title="res.gondolaTitle" data-i18n-aria="res.gondola">
             <span class="count">0</span>
           </button>
-          <button class="res" data-kind="masts" data-label="Masten" title="Masten – werden beim Bauen automatisch gesetzt" aria-label="Masten">
+          <button class="res" data-kind="masts" title="Masten – werden beim Bauen automatisch gesetzt" aria-label="Masten" data-i18n-title="res.mastsTitle" data-i18n-aria="res.masts">
             <span class="count">0</span>
           </button>
-          <button class="res" data-kind="tall" data-label="hohen Masten" title="Hoher Mast – überspannt ein einzelnes blockierendes Gebäude (automatisch)" aria-label="Hohe Masten" hidden>
+          <button class="res" data-kind="tall" title="Hoher Mast – überspannt ein einzelnes blockierendes Gebäude (automatisch)" aria-label="Hohe Masten" data-i18n-title="res.tallTitle" data-i18n-aria="res.tall" hidden>
             <span class="count">0</span>
           </button>
-          <button class="res" data-kind="cabin" data-label="großen Kabinen" title="Große Kabine – auf eine Gondel ziehen" aria-label="Große Kabinen">
+          <button class="res" data-kind="cabin" title="Große Kabine – auf eine Gondel ziehen" aria-label="Große Kabinen" data-i18n-title="res.cabinTitle" data-i18n-aria="res.cabin">
             <span class="count">0</span>
           </button>
-          <button class="res" data-kind="interchange" data-label="Umsteigestationen" title="Umsteigestation – auf eine Station ziehen" aria-label="Umsteigestationen">
+          <button class="res" data-kind="interchange" title="Umsteigestation – auf eine Station ziehen" aria-label="Umsteigestationen" data-i18n-title="res.interchangeTitle" data-i18n-aria="res.interchange">
             <span class="count">0</span>
           </button>
         </div>
@@ -75,11 +75,12 @@
       <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.6" /><path d="M5 20.5c.7-4.3 3.5-6.6 7-6.6s6.3 2.3 7 6.6z" /></svg>
       <span id="user-name"></span>
     </div>
-    <div id="paused" class="paused-banner" hidden>Pausiert<span class="kbd-only"> · Leertaste zum Fortsetzen</span></div>
+    <div id="paused" class="paused-banner" hidden><span data-i18n="paused.text">Pausiert</span><span class="kbd-only" data-i18n="paused.hint"> · Leertaste zum Fortsetzen</span></div>
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
     <section id="screen-start" class="screen start">
       <div class="panel start-panel">
+        <span class="lang-switch lang-corner" role="group" aria-label="Sprache" data-i18n-aria="lang.label"></span>
         <svg class="logo" viewBox="0 0 120 64" aria-hidden="true">
           <path d="M4 50 L60 14 L116 34" fill="none" stroke="#E03A3E" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" />
           <path d="M8 22 L112 58" fill="none" stroke="#F4B400" stroke-width="6" stroke-linecap="round" />
@@ -90,46 +91,46 @@
           <rect x="26.6" y="32.4" width="6.8" height="3" rx="0.8" fill="#fff" />
         </svg>
         <h1>Teleférico</h1>
-        <p class="tagline">Baue das Seilbahnnetz zwischen El Alto, dem Zentrum und der Zona Sur.</p>
+        <p class="tagline" data-i18n="start.tagline">Baue das Seilbahnnetz zwischen El Alto, dem Zentrum und der Zona Sur.</p>
         <div class="seed-row">
-          <label for="seed-input">Seed</label>
-          <input id="seed-input" type="text" maxlength="12" placeholder="zufällig" autocomplete="off" autocapitalize="characters" spellcheck="false" />
-          <button id="btn-dice" class="icon-btn small" type="button" aria-label="Zufälligen Seed würfeln" title="Zufälligen Seed würfeln">
+          <label for="seed-input" data-i18n="start.seed">Seed</label>
+          <input id="seed-input" type="text" maxlength="12" placeholder="zufällig" data-i18n-placeholder="start.seedPlaceholder" autocomplete="off" autocapitalize="characters" spellcheck="false" />
+          <button id="btn-dice" class="icon-btn small" type="button" aria-label="Zufälligen Seed würfeln" title="Zufälligen Seed würfeln" data-i18n-aria="start.dice" data-i18n-title="start.dice">
             <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="17" height="17" rx="4" class="stroke" /><circle cx="8.5" cy="8.5" r="1.5" /><circle cx="15.5" cy="15.5" r="1.5" /><circle cx="15.5" cy="8.5" r="1.5" /><circle cx="8.5" cy="15.5" r="1.5" /><circle cx="12" cy="12" r="1.5" /></svg>
           </button>
         </div>
-        <button id="btn-play" class="btn primary">Spielen</button>
+        <button id="btn-play" class="btn primary" data-i18n="start.play">Spielen</button>
         <div class="menu-row">
-          <button id="btn-continue" class="btn small" hidden>Weiterspielen</button>
-          <button id="btn-saves" class="btn small">Spielstände</button>
+          <button id="btn-continue" class="btn small" hidden data-i18n="start.continue">Weiterspielen</button>
+          <button id="btn-saves" class="btn small" data-i18n="start.saves">Spielstände</button>
           <button id="btn-account" class="btn small">Anmelden</button>
-          <button id="btn-board" class="btn small" hidden>Bestenliste</button>
+          <button id="btn-board" class="btn small" hidden data-i18n="start.board">Bestenliste</button>
         </div>
         <p id="best" class="best"></p>
         <ul class="rules">
           <li>
             <svg class="r-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 18 19 6" class="ln" /><circle cx="5" cy="18" r="3.2" class="st" /><rect x="16" y="3" width="6" height="6" class="st" /></svg>
-            Ziehe von Station zu Station, um eine Seilbahnlinie zu spannen. Mausrad, Rechtsklick oder zwei Finger bewegen die Karte.
+            <span data-i18n="start.rule1">Ziehe von Station zu Station, um eine Seilbahnlinie zu spannen. Mausrad, Rechtsklick oder zwei Finger bewegen die Karte.</span>
           </li>
           <li>
             <svg class="r-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 9.5 8.5 15.5H1.5z" class="fill" /><path d="m11 12.5h4" class="ar" /><path d="m13.5 10 2.5 2.5-2.5 2.5" class="ar" /><path d="M20 9 23.5 15H16.5z" class="st" /></svg>
-            Fahrgäste wollen zu einer Station mit ihrer Form – notfalls mit Umstieg.
+            <span data-i18n="start.rule2">Fahrgäste wollen zu einer Station mit ihrer Form – notfalls mit Umstieg.</span>
           </li>
           <li>
             <svg class="r-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 6h20" class="ar" /><path d="M9 21 11.3 7h1.4L15 21z" class="fill" /><path d="M7.5 5.2h9v2h-9z" class="fill" /></svg>
-            Steile Kanten, tiefe Schluchten, Bergrücken und lange Spannweiten brauchen Masten. Bergauf sind Gondeln langsamer.
+            <span data-i18n="start.rule3">Steile Kanten, tiefe Schluchten, Bergrücken und lange Spannweiten brauchen Masten. Bergauf sind Gondeln langsamer.</span>
           </li>
           <li>
             <svg class="r-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="4" width="6" height="16" class="fill" /><rect x="13" y="9" width="6" height="11" class="fill" /><path d="M2 3 22 21" class="no" /></svg>
-            Über dunkle Gebäude – Hochhäuser, Flughafen, Stadien, Spitäler, Kasernen – darf kein Seil führen.
+            <span data-i18n="start.rule4">Über dunkle Gebäude – Hochhäuser, Flughafen, Stadien, Spitäler, Kasernen – darf kein Seil führen.</span>
           </li>
           <li>
             <svg class="r-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" class="ring" /><path d="M12 12V3a9 9 0 0 1 8.6 11.7z" class="warn" /><circle cx="12" cy="12" r="3.6" class="st" /></svg>
-            Bleibt eine Station zu lange überfüllt, ist das Spiel vorbei.
+            <span data-i18n="start.rule5">Bleibt eine Station zu lange überfüllt, ist das Spiel vorbei.</span>
           </li>
         </ul>
         <div class="start-foot">
-          <span class="kbd-only">Leertaste Pause · 1/2 Tempo · Entf Linie löschen · C Zentrieren</span>
+          <span class="kbd-only" data-i18n="start.keys">Leertaste Pause · 1/2 Tempo · Entf Linie löschen · C Zentrieren</span>
           <button id="start-sound" class="link-btn">Ton: an</button>
         </div>
       </div>
@@ -138,8 +139,8 @@
     <section id="screen-reward" class="screen modal" hidden>
       <div class="panel reward-panel" role="dialog" aria-modal="true" aria-labelledby="reward-title">
         <p class="eyebrow" id="reward-week">Woche 2</p>
-        <h2 id="reward-title">Die Stadt wächst</h2>
-        <p class="sub">Du bekommst eine neue Gondel. Wähle zusätzlich eine Belohnung:</p>
+        <h2 id="reward-title" data-i18n="reward.title">Die Stadt wächst</h2>
+        <p class="sub" data-i18n="reward.sub">Du bekommst eine neue Gondel. Wähle zusätzlich eine Belohnung:</p>
         <div id="reward-cards" class="cards"></div>
       </div>
     </section>
@@ -148,87 +149,88 @@
       <div class="panel over-panel" role="dialog" aria-modal="true" aria-labelledby="over-title">
         <p class="eyebrow" id="over-eyebrow">Game Over</p>
         <h2 id="over-title">Station überfüllt</h2>
-        <div class="big-score"><span id="over-score">0</span><small>Fahrgäste befördert</small></div>
-        <p id="over-record" class="record" hidden>Neuer Rekord!</p>
+        <div class="big-score"><span id="over-score">0</span><small data-i18n="over.scoreLabel">Fahrgäste befördert</small></div>
+        <p id="over-record" class="record" hidden data-i18n="over.record">Neuer Rekord!</p>
         <dl id="over-stats" class="stats"></dl>
         <p id="over-meta" class="note"></p>
         <div class="actions">
-          <button id="btn-again" class="btn primary">Neue Runde</button>
-          <button id="btn-same" class="btn">Gleicher Seed</button>
-          <button id="btn-home" class="btn">Hauptmenü</button>
+          <button id="btn-again" class="btn primary" data-i18n="over.again">Neue Runde</button>
+          <button id="btn-same" class="btn" data-i18n="over.same">Gleicher Seed</button>
+          <button id="btn-home" class="btn" data-i18n="over.home">Hauptmenü</button>
         </div>
       </div>
     </section>
 
     <section id="screen-menu" class="screen modal" hidden>
       <div class="panel menu-panel" role="dialog" aria-modal="true" aria-labelledby="menu-title">
-        <h2 id="menu-title">Pause</h2>
+        <h2 id="menu-title" data-i18n="menu.title">Pause</h2>
         <p id="menu-meta" class="note"></p>
         <div class="actions vertical">
-          <button id="btn-resume" class="btn primary">Weiterspielen</button>
-          <button id="btn-save" class="btn">Spiel speichern</button>
-          <button id="btn-restart" class="btn">Neu starten (gleicher Seed)</button>
-          <button id="btn-quit" class="btn">Hauptmenü</button>
+          <button id="btn-resume" class="btn primary" data-i18n="menu.resume">Weiterspielen</button>
+          <button id="btn-save" class="btn" data-i18n="menu.save">Spiel speichern</button>
+          <button id="btn-restart" class="btn" data-i18n="menu.restart">Neu starten (gleicher Seed)</button>
+          <button id="btn-quit" class="btn" data-i18n="menu.quit">Hauptmenü</button>
         </div>
+        <div class="menu-lang"><span class="lang-switch" role="group" aria-label="Sprache" data-i18n-aria="lang.label"></span></div>
       </div>
     </section>
 
     <section id="screen-saves" class="screen modal" hidden>
       <div class="panel saves-panel" role="dialog" aria-modal="true" aria-labelledby="saves-title">
-        <p class="eyebrow" id="saves-eyebrow">Spielstände</p>
+        <p class="eyebrow" id="saves-eyebrow" data-i18n="saves.eyebrow">Spielstände</p>
         <h2 id="saves-title">Laden</h2>
         <div id="saves-list" class="saves-list"></div>
         <p id="saves-note" class="note"></p>
         <div class="actions">
-          <button id="btn-import" class="btn small" hidden>Lokale Spielstände ins Konto übernehmen</button>
-          <button id="btn-saves-close" class="btn">Schließen</button>
+          <button id="btn-import" class="btn small" hidden data-i18n="saves.import">Lokale Spielstände ins Konto übernehmen</button>
+          <button id="btn-saves-close" class="btn" data-i18n="saves.close">Schließen</button>
         </div>
       </div>
     </section>
 
     <section id="screen-account" class="screen modal" hidden>
       <div class="panel account-panel" role="dialog" aria-modal="true" aria-labelledby="account-title">
-        <p class="eyebrow">Konto</p>
+        <p class="eyebrow" data-i18n="account.eyebrow">Konto</p>
         <h2 id="account-title">Anmelden</h2>
-        <p id="account-offline" class="note" hidden>
+        <p id="account-offline" class="note" hidden data-i18n-html="account.offline">
           Konten gibt es nur, wenn das Spiel über den eigenen Server läuft (<code>npm start</code>). Als Gast werden Spielstände lokal im Browser gespeichert.
         </p>
         <form id="auth-form" class="auth-form" novalidate>
           <div class="tabs" role="tablist">
-            <button type="button" class="tab active" data-mode="login" role="tab" aria-selected="true">Anmelden</button>
-            <button type="button" class="tab" data-mode="register" role="tab" aria-selected="false">Registrieren</button>
+            <button type="button" class="tab active" data-mode="login" role="tab" aria-selected="true" data-i18n="account.tabLogin">Anmelden</button>
+            <button type="button" class="tab" data-mode="register" role="tab" aria-selected="false" data-i18n="account.tabRegister">Registrieren</button>
           </div>
-          <label>Benutzername
+          <label><span data-i18n="account.user">Benutzername</span>
             <input id="auth-user" name="username" autocomplete="username" maxlength="24" spellcheck="false" autocapitalize="none" />
           </label>
-          <label>Passwort
+          <label><span data-i18n="account.pass">Passwort</span>
             <input id="auth-pass" name="password" type="password" autocomplete="current-password" maxlength="128" />
           </label>
-          <p id="auth-hint" class="note small">3–24 Zeichen (Buchstaben, Ziffern, _ . -) · Passwort mindestens 8 Zeichen</p>
+          <p id="auth-hint" class="note small" data-i18n="account.hint">3–24 Zeichen (Buchstaben, Ziffern, _ . -) · Passwort mindestens 8 Zeichen</p>
           <p id="auth-error" class="form-error" role="alert"></p>
           <button type="submit" class="btn primary" id="auth-submit">Anmelden</button>
         </form>
         <div id="account-info" class="account-info" hidden>
-          <p>Angemeldet als <strong id="account-name"></strong></p>
-          <h3>Deine besten Runden</h3>
+          <p><span data-i18n="account.loggedInAs">Angemeldet als</span> <strong id="account-name"></strong></p>
+          <h3 data-i18n="account.best">Deine besten Runden</h3>
           <ol id="my-scores" class="score-list"></ol>
-          <div class="actions"><button id="btn-logout" class="btn">Abmelden</button></div>
+          <div class="actions"><button id="btn-logout" class="btn" data-i18n="account.logout">Abmelden</button></div>
         </div>
-        <div class="actions"><button id="btn-account-close" class="btn">Schließen</button></div>
+        <div class="actions"><button id="btn-account-close" class="btn" data-i18n="account.close">Schließen</button></div>
       </div>
     </section>
 
     <section id="screen-board" class="screen modal" hidden>
       <div class="panel board-panel" role="dialog" aria-modal="true" aria-labelledby="board-title">
-        <p class="eyebrow">Alle Spieler</p>
-        <h2 id="board-title">Bestenliste</h2>
+        <p class="eyebrow" data-i18n="board.eyebrow">Alle Spieler</p>
+        <h2 id="board-title" data-i18n="board.title">Bestenliste</h2>
         <ol id="board-list" class="score-list"></ol>
-        <div class="actions"><button id="btn-board-close" class="btn">Schließen</button></div>
+        <div class="actions"><button id="btn-board-close" class="btn" data-i18n="board.close">Schließen</button></div>
       </div>
     </section>
 
     <div id="boot-error" class="boot-error" hidden>
-      <div class="panel">
+      <div class="panel" lang="de" data-boot="de">
         <h2>Teleférico konnte nicht starten</h2>
         <p>
           Dein Browser blockiert JavaScript-Module, wenn die Datei direkt von der Festplatte (<code>file://</code>) geöffnet
@@ -240,6 +242,30 @@
         <pre>python3 -m http.server 8000</pre>
         <p>und öffne die angezeigte Adresse (z.&nbsp;B. <code>http://localhost:3000</code>).</p>
       </div>
+      <div class="panel" lang="en" data-boot="en" hidden>
+        <h2>Teleférico could not start</h2>
+        <p>
+          Your browser blocks JavaScript modules when the file is opened directly from disk (<code>file://</code>) – this
+          affects Chrome, Edge and Safari, for example.
+        </p>
+        <p>Start a small local server in the project folder instead:</p>
+        <pre>npx serve .</pre>
+        <p>or</p>
+        <pre>python3 -m http.server 8000</pre>
+        <p>and open the address it shows (e.g. <code>http://localhost:3000</code>).</p>
+      </div>
+      <div class="panel" lang="es" data-boot="es" hidden>
+        <h2>Teleférico no pudo iniciarse</h2>
+        <p>
+          Tu navegador bloquea los módulos de JavaScript cuando el archivo se abre directamente desde el disco
+          (<code>file://</code>); esto ocurre, por ejemplo, en Chrome, Edge y Safari.
+        </p>
+        <p>En su lugar, inicia un pequeño servidor local en la carpeta del proyecto:</p>
+        <pre>npx serve .</pre>
+        <p>o</p>
+        <pre>python3 -m http.server 8000</pre>
+        <p>y abre la dirección que aparece (p.&nbsp;ej. <code>http://localhost:3000</code>).</p>
+      </div>
     </div>
 
     <script>
@@ -247,7 +273,17 @@
       window.__tfShowBootError = function () {
         if (window.__tfBooted) return;
         var el = document.getElementById('boot-error');
-        if (el) el.hidden = false;
+        if (!el) return;
+        // Sprache wie im Spiel: gespeicherte Wahl, sonst Browsersprache, sonst Englisch
+        var lang = 'en';
+        try {
+          var stored = window.localStorage.getItem('teleferico.lang');
+          var nav = String((navigator.languages && navigator.languages[0]) || navigator.language || '').slice(0, 2);
+          lang = /^(de|en|es)$/.test(stored) ? stored : /^(de|en|es)$/.test(nav) ? nav : 'en';
+        } catch (e) {}
+        var panels = el.querySelectorAll('[data-boot]');
+        for (var i = 0; i < panels.length; i++) panels[i].hidden = panels[i].getAttribute('data-boot') !== lang;
+        el.hidden = false;
       };
       setTimeout(window.__tfShowBootError, 3000);
     </script>

@@ -3,6 +3,15 @@ import { CONFIG, LINE_COLORS } from './config.js';
 import { pointSegDist, clamp } from './util.js';
 import { handleGeometry, offsetSegment } from './line.js';
 import { CABIN } from './gondola.js';
+import { t, buildingName } from './i18n.js';
+
+/** Grund, warum eine Strecke gesperrt ist (Code aus dem Mastplan → Text). */
+function blockedText(plan) {
+  if (plan.reason === 'airport') return t('reason.airport');
+  if (plan.reason === 'building') return t('reason.building', { name: buildingName(plan.blockedBy) });
+  if (plan.reason === 'mastSpace') return t('reason.mastSpace');
+  return t('reason.generic');
+}
 
 const sameList = (a, b) => a.length === b.length && a.every((s, i) => s === b[i]);
 
@@ -388,7 +397,7 @@ export class Input {
     if (drag.mode === 'blocked') {
       if (drag.moved && !drag.warned) {
         drag.warned = true;
-        this.ui.toast('Alle Linien sind belegt. Verlängere eine Linie an ihrem Endstück oder lösche eine Linie.');
+        this.ui.toast(t('toast.allLinesUsed'));
         this.audio.invalid();
       }
       return;
@@ -439,18 +448,16 @@ export class Input {
     const g = this.game;
     // Bedarf nur der neuen Strecke(n) a→b (und b→next beim Einfügen), nicht der ganzen Linie
     const need = (key) => (a && b ? g.map.mastPlan(a, b)[key] + (next ? g.map.mastPlan(b, next)[key] : 0) : null);
-    if (v.reason === 'blocked') return v.plan.reason;
+    if (v.reason === 'blocked') return blockedText(v.plan);
     if (v.reason === 'tall') {
       const n = need('tall') ?? v.tall;
-      const free = Math.max(0, v.tallFree - (v.tall - n));
-      return `Hier braucht das Seil ${n} ${n === 1 ? 'hohen Mast' : 'hohe Masten'} über Gebäude – frei: ${free}.`;
+      return t('reason.tall', { n, free: Math.max(0, v.tallFree - (v.tall - n)) });
     }
     if (v.reason === 'masts' && a && b) {
       const n = need('count');
-      const free = Math.max(0, v.free - (v.masts - n));
-      return `Zu wenig Masten: Diese Strecke braucht ${n} ${n === 1 ? 'Mast' : 'Masten'}, frei ${free === 1 ? 'ist' : 'sind'} ${free}.`;
+      return t('reason.masts', { n, free: Math.max(0, v.free - (v.masts - n)) });
     }
-    return 'Diese Strecke lässt sich nicht bauen.';
+    return t('reason.generic');
   }
 
   /** Prüft das frei schwebende Stück (letzte Station → Zeiger) und merkt sich den Grund. */
@@ -459,11 +466,9 @@ export class Input {
     const plan = g.map.mastPlan(from, to);
     const free = g.mastsFree + (drag.line ? drag.line.mastCount : 0) - g.mastsFor(list);
     const tallFree = g.tallMastsFree + (drag.line ? drag.line.tallCount : 0) - g.tallFor(list);
-    if (plan.blocked) return plan.reason;
-    if (plan.tall > tallFree) {
-      return `Braucht ${plan.tall} ${plan.tall === 1 ? 'hohen Mast' : 'hohe Masten'} über Gebäude – frei: ${Math.max(0, tallFree)}`;
-    }
-    if (plan.count > free) return `Braucht ${plan.count} ${plan.count === 1 ? 'Mast' : 'Masten'} – frei: ${Math.max(0, free)}`;
+    if (plan.blocked) return blockedText(plan);
+    if (plan.tall > tallFree) return t('float.tall', { n: plan.tall, free: Math.max(0, tallFree) });
+    if (plan.count > free) return t('float.masts', { n: plan.count, free: Math.max(0, free) });
     return null;
   }
 
@@ -479,7 +484,7 @@ export class Input {
         const line = g.createLine(drag.slot, list);
         if (line) {
           this.audio.line();
-          if (!line.gondolas.length) this.ui.toast('Keine Gondel frei – ziehe eine Gondel auf die Linie, sobald du eine hast.');
+          if (!line.gondolas.length) this.ui.toast(t('toast.noGondola'));
         }
       } else if (!drag.moved) this.showTip(list[0]);
       return;
@@ -666,14 +671,14 @@ export class Input {
       if (drag.target) {
         if (g.addGondola(drag.target.line, w, { big: drag.big })) this.audio.gondola();
       } else if (drag.source) {
-        this.ui.toast('Gondel zurück im Depot.');
+        this.ui.toast(t('toast.gondolaDepot'));
       }
     } else if (drag.kind === 'cabin') {
       if (drag.target && g.applyCabin(drag.target.gondola)) this.audio.gondola();
-      else if (drag.moved) this.ui.toast('Ziehe die große Kabine auf eine Gondel oder eine Linie mit Gondel.');
+      else if (drag.moved) this.ui.toast(t('toast.cabinTarget'));
     } else if (drag.kind === 'interchange') {
       if (drag.target && g.applyInterchange(drag.target.station)) this.audio.station();
-      else if (drag.moved) this.ui.toast('Ziehe die Umsteigestation auf eine Station.');
+      else if (drag.moved) this.ui.toast(t('toast.interchangeTarget'));
     }
   }
 }

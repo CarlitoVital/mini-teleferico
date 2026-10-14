@@ -1,5 +1,5 @@
 // Spielzustand und Regeln – ohne DOM, daher auch headless (Node) lauffähig.
-import { CONFIG, COMMON_SHAPES, RARE_SHAPES, DAY_NAMES, DAY_NAMES_LONG, LINE_COLORS } from './config.js';
+import { CONFIG, COMMON_SHAPES, RARE_SHAPES, LINE_COLORS } from './config.js';
 import { makeRng, clamp, pick, pickWeighted, shuffle, hashSeed, normalizeSeed } from './util.js';
 import { CityMap } from './map.js';
 import { START_AREAS, MAP } from './data/terrain.js';
@@ -24,18 +24,6 @@ export function rushFactor(h) {
 }
 
 const RARE = new Set(RARE_SHAPES);
-
-export const REWARDS = {
-  line: { title: 'Neue Linie', text: 'Eine weitere Seilbahnlinie zum Bauen.' },
-  gondola: { title: 'Gondel', text: 'Eine zusätzliche Gondel für eine beliebige Linie.' },
-  masts: { title: '2 Masten', text: 'Für lange Spannweiten, Schluchten, steile Kanten und Bergrücken.' },
-  tall: { title: 'Hoher Mast', text: 'Ein Seil darf ein einzelnes Hochhaus, Stadion, Spital oder eine Kaserne überspannen.' },
-  cabin: { title: 'Große Kabine', text: `Eine Gondel fasst ${CONFIG.bigCabinCapacity} statt ${CONFIG.gondolaCapacity} Fahrgäste.` },
-  interchange: {
-    title: 'Umsteigestation',
-    text: `Station fasst ${CONFIG.interchangeCapacity} Fahrgäste, Umsteigen geht doppelt so schnell.`,
-  },
-};
 
 export class Game {
   /**
@@ -112,18 +100,8 @@ export class Game {
     return Math.floor(this.totalHours / 24);
   }
 
-  get dayName() {
-    return DAY_NAMES[this.dayIndex % 7];
-  }
-
   get weeksElapsed() {
     return this.time / (CONFIG.dayLength * 7);
-  }
-
-  clockText() {
-    const h = Math.floor(this.hour);
-    const m = Math.floor((this.hour - h) * 60);
-    return `${this.dayName} ${String(h).padStart(2, '0')}:${String(m - (m % 10)).padStart(2, '0')}`;
   }
 
   /** Wachstumsfaktor der Kantenlänge des Stadtbereichs. */
@@ -370,8 +348,6 @@ export class Game {
       score: this.score,
       week: this.week,
       day: this.dayIndex + 1,
-      dayName: this.dayName,
-      dayLong: DAY_NAMES_LONG[this.dayIndex % 7],
       time: this.time,
       stations: this.stations.length,
       lines: active.length,

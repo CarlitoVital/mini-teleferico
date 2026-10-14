@@ -8,15 +8,6 @@ const DEG = Math.PI / 180;
 /** Grundrichtung des Straßenrasters von El Alto. */
 const GRID_ANGLE = -8 * DEG;
 
-export const KIND_NAMES = {
-  airport: 'Flughafen',
-  approach: 'Einflugschneise',
-  stadium: 'Stadion',
-  hospital: 'Spital mit Heliport',
-  barracks: 'Kaserne',
-  highrise: 'Hochhaus',
-};
-
 /** Diese Bauwerke dürfen mit einem hohen Mast einzeln überspannt werden. */
 const TALL_OK = new Set(['highrise', 'stadium', 'hospital', 'barracks']);
 
@@ -273,10 +264,8 @@ export class Buildings {
     for (const h of hits) {
       if (!h.b.tallOk) {
         plan.blocked = true;
-        plan.reason =
-          h.b.kind === 'approach' || h.b.kind === 'airport'
-            ? 'Flughafen-Sperrzone: kein Seil über Flughafen und Einflugschneise.'
-            : `Kein Seil über ${h.b.name}.`;
+        // Grund als Code, den die Oberfläche übersetzt: 'airport' | 'building' (blockedBy) | 'mastSpace'
+        plan.reason = h.b.kind === 'approach' || h.b.kind === 'airport' ? 'airport' : 'building';
         plan.blockedBy = h.b;
         return;
       }
@@ -305,7 +294,7 @@ export class Buildings {
       }
       if (!moved) {
         plan.blocked = true;
-        plan.reason = 'Kein Platz für einen Mast – Gebäude im Weg.';
+        plan.reason = 'mastSpace';
         return;
       }
       plan.ts[i] = t;

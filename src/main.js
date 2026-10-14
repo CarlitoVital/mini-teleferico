@@ -5,7 +5,7 @@ import { Input } from './input.js';
 import { UI } from './ui.js';
 import { SoundBoard } from './audio.js';
 import { AutoPlayer } from './autoplay.js';
-import { SHAPE_NAMES, LINE_COLORS } from './config.js';
+import { t, colorName, shapeName, slotLabel } from './i18n.js';
 import { storageGet, storageSet, randomSeed, normalizeSeed, clamp } from './util.js';
 import { deserializeGame } from './save.js';
 import { Persistence } from './persist.js';
@@ -133,7 +133,7 @@ function startGame(seed) {
   autosaveAcc = 0;
   wire(game);
   ui.showGame();
-  ui.toast('Ziehe von einer Station zur nächsten, um deine erste Seilbahnlinie zu bauen.', 5500);
+  ui.toast(t('toast.firstLine'), 5500);
 }
 
 function showReward(g, week, options) {
@@ -157,20 +157,15 @@ function wire(g) {
   };
   g.hint = {
     reward(k) {
-      const kindHint = {
-        line: 'Neue Linie frei: Ziehe von einer Station aus, um sie zu bauen.',
-        cabin: 'Ziehe die große Kabine auf eine Gondel oder Linie.',
-        interchange: 'Ziehe die Umsteigestation auf eine viel genutzte Station.',
-        tall: 'Hoher Mast: Ein neues Seil darf jetzt ein einzelnes Hochhaus, Stadion, Spital oder eine Kaserne überspannen.',
-      }[k];
+      const kindHint = ['line', 'cabin', 'interchange', 'tall'].includes(k) ? t(`hint.${k}`) : null;
       if (kindHint && !hints.has(k)) hint(k, kindHint);
-      else if (g.gondolasFree > 0) hint('depot', 'Ziehe die neue Gondel aus der unteren Leiste auf eine Linie.');
+      else if (g.gondolasFree > 0) hint('depot', t('hint.depot'));
     },
   };
-  const mastHint = () => hint('mast', `Masten tragen das Seil über Schluchten, steile Kanten und Bergrücken. Frei: ${g.mastsFree}.`);
+  const mastHint = () => hint('mast', t('hint.mast', { n: g.mastsFree }));
   g.on('line', (line) => {
     if (line.mastCount) mastHint();
-    else hint('handle', 'Linie steht! Am T-Ende kannst du sie verlängern – oder durch Zurückziehen kürzen.');
+    else hint('handle', t('hint.handle'));
   });
   g.on('lineChanged', (line) => {
     if (line.mastCount) mastHint();
@@ -182,13 +177,13 @@ function wire(g) {
   });
   g.on('rare', (st) => {
     audio.rare();
-    ui.toast(`Neue Station mit seltener Form: ${SHAPE_NAMES[st.shape]} in ${st.name}.`);
+    ui.toast(t('toast.rare', { shape: shapeName(st.shape), station: st.name }));
   });
   g.on('board', ({ line }) => audio.board(line.slot));
   g.on('deliver', ({ line }) => audio.deliver(line.slot));
   g.on('warn', (st) => {
     audio.warn();
-    ui.toast(`${st.name} ist überfüllt! Bring schnell Gondeln dorthin.`);
+    ui.toast(t('toast.overcrowded', { station: st.name }));
   });
   g.on('week', ({ week, options }) => {
     input.cancel();
@@ -216,8 +211,8 @@ function onGameOver(g, sum) {
     if (persist.online && sum.score > 0) {
       api
         .submitScore({ score: sum.score, week: sum.week, seed: sum.seed, area: sum.area, time: Math.round(sum.time) })
-        .then((r) => ui.setGameOverNote(r && r.best === sum.score ? 'Neuer persönlicher Bestwert im Konto!' : 'Im Konto gespeichert'))
-        .catch((err) => ui.setGameOverNote(`Bestenliste: ${err.message}`));
+        .then((r) => ui.setGameOverNote(r && r.best === sum.score ? 'over.scoreBest' : 'over.scoreSaved'))
+        .catch((err) => ui.setGameOverNote('over.scoreError', { msg: err.message }));
     }
   }, 1700);
 }
@@ -242,7 +237,7 @@ async function autosave() {
   if (r.server === false && persist.online) lastSaved.dirty = true;
   if (r.server === false && !autosave.warned) {
     autosave.warned = true;
-    if (persist.online) ui.toast(`Konto-Speicherung fehlgeschlagen (${r.error}) – lokal gesichert.`);
+    if (persist.online) ui.toast(t('toast.autosaveFailed', { msg: r.error }));
   } else if (r.server) {
     autosave.warned = false;
   }
@@ -266,18 +261,12 @@ async function refreshContinue() {
 
 async function openSaves(mode) {
   const { entries, error } = mode === 'save' ? await persist.saveSlots() : await persist.list();
-  let note = '';
-  if (mode === 'save') {
-    note = persist.online
-      ? 'Gespeichert wird lokal und zusätzlich in deinem Konto.'
-      : 'Gespeichert wird lokal in diesem Browser. Mit einem Konto auch auf dem Server.';
-  } else {
-    note = persist.online ? '' : api.available ? 'Melde dich an, um Spielstände auf allen Geräten zu laden.' : '';
-  }
-  if (error) note = `Spielstände im Konto konnten nicht geladen werden (${error}).`;
-  if (!(await localSaves.available())) {
-    note = 'Dieser Browser erlaubt keinen dauerhaften Speicher – Spielstände gehen beim Neuladen verloren.';
-  }
+  // Hinweis als Schlüssel, damit er bei einem Sprachwechsel mit übersetzt wird
+  let note = null;
+  if (mode === 'save') note = { key: persist.online ? 'saves.noteSaveOnline' : 'saves.noteSaveLocal' };
+  else if (!persist.online && api.available) note = { key: 'saves.noteLogin' };
+  if (error) note = { key: 'saves.noteError', params: { msg: error } };
+  if (!(await localSaves.available())) note = { key: 'saves.noteNoStorage' };
   const canImport = mode === 'load' && persist.online && (await persist.hasLocal());
   ui.showSaves({ mode, entries, note, canImport });
   ui.savesMode = mode;
@@ -287,8 +276,8 @@ async function saveToSlot(entry) {
   if (!game || game.demo || game.state === 'over') return;
   const r = await persist.save(entry.id, game, cameraState(), runId, entry.key);
   audio.click();
-  if (r.server === false) ui.toast(`Lokal gespeichert, Konto fehlgeschlagen: ${r.error}`);
-  else ui.toast(`Gespeichert in ${entry.label}${r.server ? ' (lokal und im Konto)' : ''}.`);
+  if (r.server === false) ui.toast(t('toast.savedLocalOnly', { msg: r.error }));
+  else ui.toast(t(r.server ? 'toast.savedBoth' : 'toast.saved', { slot: slotLabel(entry.id) }));
   openSaves('save');
 }
 
@@ -302,9 +291,9 @@ async function loadEntry(entry) {
     // damit dessen Autosaves nicht als Teil einer womöglich schon beendeten Runde gelten
     applyLoaded(g, camera, entry.kind === 'auto' ? entry.meta && entry.meta.runId : null);
     audio.click();
-    ui.toast(`Spielstand geladen – Woche ${g.week}, ${g.score} Fahrgäste. Leertaste zum Fortsetzen.`, 4000);
+    ui.toast(t('toast.loaded', { week: g.week, score: g.score }), 4000);
   } catch (err) {
-    ui.toast(`Laden fehlgeschlagen: ${err.message}`);
+    ui.toast(t('toast.loadFailed', { msg: err.message }));
   }
 }
 
@@ -334,13 +323,13 @@ function applyLoaded(g, camera, rid) {
 }
 
 async function deleteEntry(entry) {
-  const where = { server: 'im Konto', both: 'auf diesem Gerät und im Konto' }[entry.source] || 'auf diesem Gerät';
-  if (!window.confirm(`„${entry.label}“ ${where} wirklich löschen?`)) return;
+  const key = { server: 'confirm.deleteServer', both: 'confirm.deleteBoth' }[entry.source] || 'confirm.deleteLocal';
+  if (!window.confirm(t(key, { slot: slotLabel(entry.id) }))) return;
   try {
     await persist.remove(entry);
-    ui.toast('Spielstand gelöscht.');
+    ui.toast(t('toast.deleted'));
   } catch (err) {
-    ui.toast(`Löschen fehlgeschlagen: ${err.message}`);
+    ui.toast(t('toast.deleteFailed', { msg: err.message }));
   }
   openSaves(ui.savesMode || 'load');
   refreshContinue();
@@ -349,9 +338,9 @@ async function deleteEntry(entry) {
 async function importLocal() {
   try {
     const n = await persist.importLocal();
-    ui.toast(n ? `${n} ${n === 1 ? 'Spielstand' : 'Spielstände'} ins Konto übernommen.` : 'Keine lokalen Spielstände gefunden.');
+    ui.toast(n ? t('toast.imported', { n }) : t('toast.importNone'));
   } catch (err) {
-    ui.toast(`Übernahme fehlgeschlagen: ${err.message}`);
+    ui.toast(t('toast.importFailed', { msg: err.message }));
   }
   openSaves('load');
 }
@@ -363,7 +352,7 @@ const hasBackend = () => !!document.querySelector('meta[name="teleferico-server"
 // Sitzung auf dem Server abgelaufen oder in einem anderen Tab abgemeldet
 persist.onSessionLost = () => {
   ui.setUser(null, api.available);
-  ui.toast('Deine Anmeldung ist abgelaufen – bitte erneut anmelden. Bis dahin wird nur lokal gespeichert.', 6000);
+  ui.toast(t('toast.sessionLost'), 6000);
   refreshContinue();
 };
 
@@ -396,11 +385,11 @@ async function openAccount() {
 async function authSubmit(mode, username, password) {
   const name = String(username || '').trim();
   if (!/^[A-Za-z0-9_.-]{3,24}$/.test(name)) {
-    ui.setAuthError('Benutzername: 3–24 Zeichen, nur Buchstaben, Ziffern, _ . -');
+    ui.setAuthError(t('auth.errUser'));
     return;
   }
   if (String(password || '').length < 8) {
-    ui.setAuthError('Das Passwort muss mindestens 8 Zeichen lang sein.');
+    ui.setAuthError(t('auth.errPass'));
     return;
   }
   ui.setAuthBusy(true);
@@ -410,9 +399,7 @@ async function authSubmit(mode, username, password) {
     audio.click();
     await openAccount();
     ui.toast(
-      (await persist.hasLocal())
-        ? `Angemeldet als ${api.user.username}. Unter „Spielstände“ kannst du lokale Stände ins Konto übernehmen.`
-        : `Angemeldet als ${api.user.username}.`,
+      t((await persist.hasLocal()) ? 'toast.loggedInImport' : 'toast.loggedIn', { name: api.user.username }),
       5000,
     );
     refreshContinue();
@@ -439,7 +426,7 @@ async function openBoard() {
   try {
     ui.showBoard(await api.leaderboard(), api.user);
   } catch (err) {
-    ui.toast(`Bestenliste nicht verfügbar: ${err.message}`);
+    ui.toast(t('toast.boardFailed', { msg: err.message }));
   }
 }
 
@@ -470,7 +457,7 @@ function openMenu() {
   input.cancel();
   state.menuWasPaused = state.paused;
   state.paused = true;
-  ui.showMenu(true, `Seed ${game.seed} · Start: ${game.startArea.name}`);
+  ui.showMenu(true, { seed: game.seed, area: game.startArea.name });
   audio.click();
 }
 
@@ -486,7 +473,7 @@ function deleteSelected() {
   game.closeLine(l);
   view.selectedLine = null;
   audio.remove();
-  ui.toast(`Linie ${l.color.name} wird abgebaut – ihre Gondeln kehren ins Depot zurück.`);
+  ui.toast(t('toast.lineRemoved', { color: colorName(l.slot) }));
 }
 
 function onDot(slot) {
@@ -496,7 +483,7 @@ function onDot(slot) {
   else if (!l) {
     view.preferredSlot = slot;
     view.selectedLine = null;
-    ui.toast(`Die nächste neue Linie wird ${LINE_COLORS[slot].name}.`, 1800);
+    ui.toast(t('toast.nextColor', { color: colorName(slot) }), 1800);
   }
   audio.click();
 }
