@@ -63,6 +63,7 @@ Die Karte ist ca. 25 × 20 km groß (Norden oben) und aus Kontrollpunkten in `sr
   - über jeder **Schlucht**, die mindestens 35 m tief ist (Choqueyapu, Orkojahuira, Irpavi, Achocalla und viele Seitenquebradas),
   - an **steilen Kanten** wie der Ceja (mehr als 70 m Höhenunterschied auf 240 m),
   - wo ein Bergrücken das Seil berühren würde (das Seil hängt zwischen 18 m hohen Stationstürmen und 30 m hohen Masten und braucht 12 m Bodenabstand).
+
   Reicht der Vorrat nicht, wird die Vorschau rot gestrichelt. Baust du eine Strecke ab, bekommst du ihre Masten zurück.
 - **Höhe:** Gondeln fahren bergauf Richtung El Alto langsamer und bergab etwas schneller.
 - **Bauplätze:** Stationen entstehen nur auf bebaubarem Gelände – nicht in Schluchten und Flüssen und nicht an Hängen steiler als etwa 19 %.

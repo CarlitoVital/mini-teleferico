@@ -84,7 +84,7 @@ test('t(): Platzhalter, Plural, Rückfall und Namen', () => {
     assert.equal(t('toast.imported', { n: 1 }), '1 saved game copied to your account.');
     assert.equal(t('toast.imported', { n: 4 }), '4 saved games copied to your account.');
     assert.equal(t('gibt.es.nicht'), 'gibt.es.nicht');
-    assert.equal(colorName(6), 'Light blue');
+    assert.equal(colorName(6), 'Light Blue');
     assert.equal(areaName('Zentrum'), 'City centre');
     assert.equal(areaName('El Alto'), 'El Alto');
     assert.equal(slotLabel('import-2'), 'Imported 2');
