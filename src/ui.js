@@ -205,7 +205,8 @@ export class UI {
     this.sig = {};
     if (initial) return;
     const L = this.last;
-    if (!this.el.start.hidden) this.showStart(L.best);
+    // Nur den Text erneuern – showStart() würde offene Dialoge (Spielstände, Konto, Bestenliste) schließen
+    if (!this.el.start.hidden) this.renderBest(L.best);
     if (!this.el.reward.hidden && L.reward) this.renderReward(...L.reward);
     if (!this.el.over.hidden && L.over) this.renderGameOver(...L.over);
     if (!this.el.saves.hidden && L.saves) this.showSaves(L.saves);
@@ -215,6 +216,7 @@ export class UI {
     if (L.user !== undefined) this.setUser(L.user, L.available);
     if (L.cont !== undefined) this.setContinue(L.cont);
     this.setAuthMode(this.authMode, true);
+    this.setAuthError(this.authError);
     if (this.h.onLangChange) this.h.onLangChange();
   }
 
@@ -245,7 +247,11 @@ export class UI {
     this.el.bar.hidden = true;
     this.el.paused.hidden = true;
     document.body.classList.add('at-start');
-    this.el.best.textContent = best ? t('start.best', { score: best.score, week: best.week }) : t('start.noBest');
+    this.renderBest(best);
+  }
+
+  renderBest(best) {
+    this.el.best.textContent = best ? t('start.best', { n: best.score, score: best.score, week: best.week }) : t('start.noBest');
   }
 
   showGame() {
@@ -268,7 +274,9 @@ export class UI {
     this.last.cont = entry;
     const b = $('btn-continue');
     b.hidden = !entry;
-    if (entry) b.title = t('start.continueTitle', { area: areaName(entry.meta.area), week: entry.meta.week, score: entry.meta.score });
+    if (entry) {
+      b.title = t('start.continueTitle', { n: entry.meta.score, area: areaName(entry.meta.area), week: entry.meta.week, score: entry.meta.score });
+    }
   }
 
   showReward(game, week, options, onChoose) {
@@ -292,7 +300,7 @@ export class UI {
     this.el.rewardCards.innerHTML = options
       .map((k, i) => {
         const icon = k === 'line' ? ICONS.line(nextColor.hex) : ICONS[k];
-        return `<button class="card" data-index="${i}" data-kind="${k}">
+        return `<button class="card" data-index="${i}" data-kind="${esc(k)}">
           <span class="card-icon">${icon}</span>
           <span class="card-title">${esc(t(`reward.${k}.title`))}</span>
           <span class="card-text">${esc(t(`reward.${k}.text`, params))}</span>
@@ -364,7 +372,7 @@ export class UI {
         const m = e.meta;
         const label = slotLabel(e.id);
         const info = m
-          ? `<span class="save-main">${esc(t('saves.main', { week: m.week, score: m.score, area: areaName(m.area) }))}</span>
+          ? `<span class="save-main">${esc(t('saves.main', { n: m.score, week: m.week, score: m.score, area: areaName(m.area) }))}</span>
              <span class="save-sub">${esc(t('saves.sub', { date: formatDate(m.savedAt), seed: m.seed }))}</span>`
           : `<span class="save-main empty">${esc(t('saves.empty'))}</span>`;
         const src =
@@ -412,8 +420,10 @@ export class UI {
     if (!keepError) this.setAuthError('');
   }
 
-  setAuthError(msg) {
-    $('auth-error').textContent = msg || '';
+  /** e: Schlüssel im Wörterbuch, Fehlerobjekt oder leer – wird bei Sprachwechsel neu übersetzt. */
+  setAuthError(e) {
+    this.authError = e || null;
+    $('auth-error').textContent = !e ? '' : typeof e === 'string' ? t(e) : e.message;
   }
 
   setAuthBusy(busy) {
@@ -442,7 +452,7 @@ export class UI {
         ? scores
             .map(
               (s) =>
-                `<li><b>${esc(s.score)}</b> ${esc(t('scores.row', { week: s.week, area: areaName(s.area) }))} <span class="muted">${esc(formatDate(s.createdAt))}</span></li>`,
+                `<li><b>${esc(s.score)}</b> ${esc(t('scores.row', { n: s.score, week: s.week, area: areaName(s.area) }))} <span class="muted">${esc(formatDate(s.createdAt))}</span></li>`,
             )
             .join('')
         : `<li class="muted">${esc(t('account.noScores'))}</li>`;

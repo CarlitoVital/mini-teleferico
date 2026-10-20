@@ -13,6 +13,9 @@ import { localSaves } from './storage.js';
 import { api } from './api.js';
 
 window.__tfBooted = true;
+// Bei langsamer Verbindung kann der 3-s-Timer in index.html den Hinweis schon gezeigt haben
+const bootError = document.getElementById('boot-error');
+if (bootError) bootError.hidden = true;
 
 const STEP = 1 / 60;
 const AUTOSAVE_SECONDS = 30;
@@ -212,7 +215,7 @@ function onGameOver(g, sum) {
       api
         .submitScore({ score: sum.score, week: sum.week, seed: sum.seed, area: sum.area, time: Math.round(sum.time) })
         .then((r) => ui.setGameOverNote(r && r.best === sum.score ? 'over.scoreBest' : 'over.scoreSaved'))
-        .catch((err) => ui.setGameOverNote('over.scoreError', { msg: err.message }));
+        .catch((err) => ui.setGameOverNote('over.scoreError', { msg: err }));
     }
   }, 1700);
 }
@@ -291,7 +294,7 @@ async function loadEntry(entry) {
     // damit dessen Autosaves nicht als Teil einer womöglich schon beendeten Runde gelten
     applyLoaded(g, camera, entry.kind === 'auto' ? entry.meta && entry.meta.runId : null);
     audio.click();
-    ui.toast(t('toast.loaded', { week: g.week, score: g.score }), 4000);
+    ui.toast(t('toast.loaded', { n: g.score, week: g.week, score: g.score }), 4000);
   } catch (err) {
     ui.toast(t('toast.loadFailed', { msg: err.message }));
   }
@@ -385,11 +388,11 @@ async function openAccount() {
 async function authSubmit(mode, username, password) {
   const name = String(username || '').trim();
   if (!/^[A-Za-z0-9_.-]{3,24}$/.test(name)) {
-    ui.setAuthError(t('auth.errUser'));
+    ui.setAuthError('auth.errUser');
     return;
   }
   if (String(password || '').length < 8) {
-    ui.setAuthError(t('auth.errPass'));
+    ui.setAuthError('auth.errPass');
     return;
   }
   ui.setAuthBusy(true);
@@ -404,7 +407,7 @@ async function authSubmit(mode, username, password) {
     );
     refreshContinue();
   } catch (err) {
-    ui.setAuthError(err.message);
+    ui.setAuthError(err);
   } finally {
     ui.setAuthBusy(false);
   }

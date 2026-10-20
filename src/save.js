@@ -104,9 +104,24 @@ export function migrate(data) {
   return data;
 }
 
+const REWARD_KINDS = ['line', 'gondola', 'masts', 'tall', 'cabin', 'interchange'];
+
 /** JSON-Objekt → laufendes Spiel. Liefert { game, camera }. */
 export function deserializeGame(raw) {
   const d = migrate(raw);
+  try {
+    return restoreGame(d);
+  } catch (err) {
+    // Unvollständige oder manipulierte Daten: verständliche Meldung statt einer Engine-Fehlermeldung
+    console.warn('Spielstand beschädigt:', err);
+    throw new Error(t('err.saveCorrupt'));
+  }
+}
+
+function restoreGame(d) {
+  if (d.rewardOptions != null && !(Array.isArray(d.rewardOptions) && d.rewardOptions.every((k) => REWARD_KINDS.includes(k)))) {
+    throw new Error('rewardOptions');
+  }
   const game = new Game({ seed: d.seed, aspect: d.aspect, area: d.area0, restore: true });
   Object.assign(game, {
     time: d.time,

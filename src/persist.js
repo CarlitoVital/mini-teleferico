@@ -95,7 +95,7 @@ export class Persistence {
       } catch (err) {
         this.#check(err);
         result.server = false;
-        result.error = err.message;
+        result.error = err; // Fehlerobjekt: Text erst bei der Anzeige (aktuelle Sprache)
       }
     }
     return result;
@@ -142,7 +142,7 @@ export class Persistence {
       return { rows: await api.listSaves(), error: null };
     } catch (err) {
       this.#check(err);
-      return { rows: [], error: err.message };
+      return { rows: [], error: err };
     }
   }
 

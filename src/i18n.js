@@ -80,7 +80,11 @@ export function t(key, params = {}) {
   if (v === undefined) return key;
   if (Array.isArray(v)) return v;
   if (typeof v === 'object') v = v[pluralForm(Number(params.n))] ?? v.other;
-  return String(v).replace(/\{(\w+)\}/g, (m, k) => (params[k] !== undefined ? String(params[k]) : m));
+  return String(v).replace(/\{(\w+)\}/g, (m, k) => {
+    const p = params[k];
+    if (p === undefined) return m;
+    return p instanceof Error ? p.message : String(p);
+  });
 }
 
 // ---------------------------------------------------------------- Namen aus der Spielwelt
@@ -151,6 +155,7 @@ export function applyStatic(root = document) {
   }
   if (root === document) {
     document.documentElement.lang = current;
+    document.documentElement.classList.remove('i18n-pending');
     const desc = document.querySelector('meta[name="description"]');
     if (desc) desc.setAttribute('content', t('meta.description'));
   }
