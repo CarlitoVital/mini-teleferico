@@ -10,6 +10,35 @@
       rel="icon"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23F4EFE6'/%3E%3Cpath d='M2 9 30 5' stroke='%232A2A2E' stroke-width='2'/%3E%3Cpath d='M16 7v5' stroke='%232A2A2E' stroke-width='2'/%3E%3Crect x='8' y='12' width='16' height='13' rx='3.5' fill='%23E03A3E'/%3E%3Crect x='11' y='15' width='10' height='4' rx='1' fill='%23fff'/%3E%3C/svg%3E"
     />
+    <script>
+      // Sprache sofort festlegen (wie src/i18n.js): gespeicherte Wahl, sonst Browsersprache, sonst Englisch.
+      // Bis die Übersetzungen geladen sind, bleiben die deutschen Platzhaltertexte unsichtbar.
+      (function () {
+        var lang = '';
+        try {
+          lang = window.localStorage.getItem('teleferico.lang') || '';
+        } catch (e) {}
+        if (!/^(de|en|es)$/.test(lang)) {
+          lang = 'en';
+          var prefs = navigator.languages || [navigator.language];
+          for (var i = 0; i < prefs.length; i++) {
+            var c = String(prefs[i] || '').slice(0, 2).toLowerCase();
+            if (/^(de|en|es)$/.test(c)) {
+              lang = c;
+              break;
+            }
+          }
+        }
+        document.documentElement.lang = lang;
+        if (lang !== 'de') document.documentElement.className += ' i18n-pending';
+      })();
+    </script>
+    <style>
+      /* Bis die Übersetzungen geladen sind, keine deutschen Platzhaltertexte zeigen */
+      .i18n-pending .screen .panel {
+        visibility: hidden;
+      }
+    </style>
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
@@ -110,7 +139,7 @@
         <ul class="rules">
           <li>
             <svg class="r-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 18 19 6" class="ln" /><circle cx="5" cy="18" r="3.2" class="st" /><rect x="16" y="3" width="6" height="6" class="st" /></svg>
-            <span data-i18n="start.rule1">Ziehe von Station zu Station, um eine Seilbahnlinie zu spannen. Mausrad, Rechtsklick oder zwei Finger bewegen die Karte.</span>
+            <span data-i18n="start.rule1">Ziehe von Station zu Station, um eine Seilbahnlinie zu spannen. Rechte Maustaste oder zwei Finger verschieben die Karte, das Mausrad zoomt.</span>
           </li>
           <li>
             <svg class="r-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 9.5 8.5 15.5H1.5z" class="fill" /><path d="m11 12.5h4" class="ar" /><path d="m13.5 10 2.5 2.5-2.5 2.5" class="ar" /><path d="M20 9 23.5 15H16.5z" class="st" /></svg>
@@ -274,13 +303,9 @@
         if (window.__tfBooted) return;
         var el = document.getElementById('boot-error');
         if (!el) return;
-        // Sprache wie im Spiel: gespeicherte Wahl, sonst Browsersprache, sonst Englisch
-        var lang = 'en';
-        try {
-          var stored = window.localStorage.getItem('teleferico.lang');
-          var nav = String((navigator.languages && navigator.languages[0]) || navigator.language || '').slice(0, 2);
-          lang = /^(de|en|es)$/.test(stored) ? stored : /^(de|en|es)$/.test(nav) ? nav : 'en';
-        } catch (e) {}
+        // Sprache wie im Spiel (oben im <head> bestimmt)
+        var lang = document.documentElement.lang;
+        if (!/^(de|en|es)$/.test(lang)) lang = 'en';
         var panels = el.querySelectorAll('[data-boot]');
         for (var i = 0; i < panels.length; i++) panels[i].hidden = panels[i].getAttribute('data-boot') !== lang;
         el.hidden = false;

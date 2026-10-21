@@ -6,12 +6,26 @@ import { t, has, getLang } from './i18n.js';
 const BASE = 'api/';
 const PROBE_TIMEOUT_MS = 2500;
 const REQUEST_TIMEOUT_MS = 15000;
+/**
+ * Fehler der Server-API. Die Meldung wird erst beim Lesen erzeugt – so erscheint sie nach einem
+ * Sprachwechsel in der neuen Sprache (z. B. in einem noch offenen Dialog).
+ */
 export class ApiError extends Error {
-  constructor(message, status, code = null) {
-    super(message);
+  constructor(status, code = null, { key = null, payload = null } = {}) {
+    super();
     this.name = 'ApiError';
     this.status = status;
     this.code = code;
+    this.key = key;
+    this.payload = payload;
+  }
+
+  get message() {
+    return this.key ? t(this.key) : errorMessage(this.payload, this.status);
+  }
+
+  toString() {
+    return this.message;
   }
 }
 
@@ -59,15 +73,15 @@ async function request(method, path, body, timeoutMs = REQUEST_TIMEOUT_MS) {
       }
     }
   } catch {
-    throw new ApiError(t('err.offline'), 0, 'offline');
+    throw new ApiError(0, 'offline', { key: 'err.offline' });
   } finally {
     clearTimeout(timer);
   }
   if (!res.ok) {
-    throw new ApiError(errorMessage(payload, res.status), res.status, payload && typeof payload.code === 'string' ? payload.code : null);
+    throw new ApiError(res.status, payload && typeof payload.code === 'string' ? payload.code : null, { payload });
   }
   if (res.status !== 204 && (payload === null || typeof payload !== 'object')) {
-    throw new ApiError(t('err.badResponse'), res.status);
+    throw new ApiError(res.status, null, { key: 'err.badResponse' });
   }
   return payload;
 }
